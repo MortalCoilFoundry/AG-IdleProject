@@ -21,12 +21,24 @@ export class Physics {
         ball.vx *= friction;
         ball.vy *= friction;
 
+        // Apply Wind
+        this.applyWind(ball, level);
+
         // Update Position
         ball.x += ball.vx;
         ball.y += ball.vy;
 
         // Wall Collisions
         this.handleWallCollisions(ball, level);
+
+        // Moving Obstacles
+        this.resolveMovingCollisions(ball, level);
+
+        // Boost Pads
+        this.checkBoosts(ball, level);
+
+        // Switches
+        this.checkSwitches(ball, level);
 
         // Hole Gravity
         this.handleHole(ball, level);
@@ -50,6 +62,91 @@ export class Physics {
             }
         }
         return false;
+    }
+
+    applyWind(ball, level) {
+        if (!level.entities) return;
+        for (const entity of level.entities) {
+            if (entity.type === 'wind') {
+                if (ball.x >= entity.x && ball.x <= entity.x + entity.width &&
+                    ball.y >= entity.y && ball.y <= entity.y + entity.height) {
+                    ball.vx += entity.vx;
+                    ball.vy += entity.vy;
+                    // Optional: emit event for particles if needed, but might be too frequent
+                }
+            }
+        }
+    }
+
+    checkBoosts(ball, level) {
+        if (!level.entities) return;
+        for (const entity of level.entities) {
+            if (entity.type === 'boost' && !entity.cooldown) {
+                const dx = ball.x - (entity.x + entity.width / 2);
+                const dy = ball.y - (entity.y + entity.height / 2);
+                // Simple AABB or Circle check. Let's use AABB for pads.
+                if (ball.x >= entity.x && ball.x <= entity.x + entity.width &&
+                    ball.y >= entity.y && ball.y <= entity.y + entity.height) {
+
+                    ball.vx *= entity.multiplier || 1.5;
+                    ball.vy *= entity.multiplier || 1.5;
+                    entity.cooldown = 60; // Frames
+                    eventBus.emit('BOOST_ACTIVATED', entity);
+                }
+            }
+        }
+    }
+
+    resolveMovingCollisions(ball, level) {
+        if (!level.entities) return;
+        const r = ball.radius;
+
+        for (const entity of level.entities) {
+            if (entity.type === 'mover') {
+                // Treat as a moving wall
+                const closestX = Math.max(entity.x, Math.min(ball.x, entity.x + entity.width));
+                const closestY = Math.max(entity.y, Math.min(ball.y, entity.y + entity.height));
+
+                const dx = ball.x - closestX;
+                const dy = ball.y - closestY;
+                const distSq = dx * dx + dy * dy;
+
+                if (distSq < r * r && distSq > 0) {
+                    const dist = Math.sqrt(distSq);
+                    const overlap = r - dist;
+                    const nx = dx / dist;
+                    const ny = dy / dist;
+
+                    ball.x += nx * overlap;
+                    ball.y += ny * overlap;
+
+                    // Reflect
+                    const dot = ball.vx * nx + ball.vy * ny;
+                    ball.vx = (ball.vx - 2 * dot * nx) * this.restitution;
+                    ball.vy = (ball.vy - 2 * dot * ny) * this.restitution;
+
+                    // Transfer some momentum from mover? (Advanced, skip for now)
+                    eventBus.emit('WALL_HIT', { x: ball.x, y: ball.y });
+                }
+            }
+        }
+    }
+
+    checkSwitches(ball, level) {
+        if (!level.entities) return;
+        for (const entity of level.entities) {
+            if (entity.type === 'switch' && !entity.active) {
+                // Circle check for switch
+                const dx = ball.x - entity.x;
+                const dy = ball.y - entity.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < (entity.radius || 10) + ball.radius) {
+                    entity.active = true;
+                    eventBus.emit('SWITCH_TRIGGERED', entity);
+                }
+            }
+        }
     }
 
     handleWallCollisions(ball, level) {
@@ -91,6 +188,35 @@ export class Physics {
                     ball.vy = (ball.vy - 2 * dot * ny) * this.restitution;
 
                     hit = true;
+                }
+            }
+        }
+
+        // Gates (treated as walls if closed)
+        if (level.entities) {
+            for (const entity of level.entities) {
+                if (entity.type === 'gate' && !entity.open) {
+                    const closestX = Math.max(entity.x, Math.min(ball.x, entity.x + entity.width));
+                    const closestY = Math.max(entity.y, Math.min(ball.y, entity.y + entity.height));
+
+                    const dx = ball.x - closestX;
+                    const dy = ball.y - closestY;
+                    const distSq = dx * dx + dy * dy;
+
+                    if (distSq < r * r && distSq > 0) {
+                        const dist = Math.sqrt(distSq);
+                        const overlap = r - dist;
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+
+                        ball.x += nx * overlap;
+                        ball.y += ny * overlap;
+
+                        const dot = ball.vx * nx + ball.vy * ny;
+                        ball.vx = (ball.vx - 2 * dot * nx) * this.restitution;
+                        ball.vy = (ball.vy - 2 * dot * ny) * this.restitution;
+                        hit = true;
+                    }
                 }
             }
         }

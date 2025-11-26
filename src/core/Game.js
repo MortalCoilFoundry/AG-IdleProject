@@ -29,6 +29,7 @@ export class Game {
         this.strokes = 0;
         this.totalStrokes = 0;
         this.totalPar = 0;
+        this.totalStars = 0;
 
         this.uiPar = document.getElementById('par-value');
         this.uiStrokes = document.getElementById('strokes-value');
@@ -72,6 +73,30 @@ export class Game {
             }
         });
 
+        eventBus.on('BOOST_ACTIVATED', (entity) => {
+            this.particles.emit(entity.x + entity.width / 2, entity.y + entity.height / 2, '#9bbc0f', 15, 8);
+            // TODO: Add Boost SFX
+        });
+
+        eventBus.on('SWITCH_TRIGGERED', (switchEntity) => {
+            this.renderer.shake(5);
+            // Find target gate
+            const level = this.levelManager.getCurrentLevel();
+            if (level && level.entities) {
+                const gate = level.entities.find(e => e.id === switchEntity.targetId);
+                if (gate) {
+                    gate.open = true;
+                    // Optional: Close after delay
+                    if (switchEntity.timeout) {
+                        setTimeout(() => {
+                            gate.open = false;
+                            switchEntity.active = false;
+                        }, switchEntity.timeout);
+                    }
+                }
+            }
+        });
+
         this.start();
     }
 
@@ -88,13 +113,27 @@ export class Game {
         this.ball.vy = 0;
         this.ball.isMoving = false;
 
+        // Reset Entity State (Movers, Switches, Boosts)
+        if (level.entities) {
+            for (const entity of level.entities) {
+                if (entity.type === 'mover') {
+                    // Reset position if needed, though update loop handles it
+                }
+                if (entity.type === 'switch') entity.active = false;
+                if (entity.type === 'gate') entity.open = false;
+                if (entity.type === 'boost') entity.cooldown = 0;
+            }
+        }
+
         this.strokes = 0;
         this.updateUI();
     }
 
     nextLevel() {
+        const level = this.levelManager.getCurrentLevel();
         this.totalStrokes += this.strokes;
-        this.totalPar += this.levelManager.getCurrentLevel().par;
+        this.totalPar += level.par;
+        this.totalStars += this.levelManager.getStarRating(this.strokes, level.par);
 
         const next = this.levelManager.nextLevel();
         if (next) {
@@ -122,6 +161,7 @@ export class Game {
         this.ctx.font = '20px "Press Start 2P"';
         this.ctx.fillText(`TOTAL STROKES: ${this.totalStrokes}`, 300, 300);
         this.ctx.fillText(`TOTAL PAR: ${this.totalPar}`, 300, 350);
+        this.ctx.fillText(`STARS: ${this.totalStars} / ${this.levelManager.levels.length * 3}`, 300, 400);
 
         this.audio.playWin();
     }
@@ -150,6 +190,27 @@ export class Game {
         if (level) {
             this.physics.update(this.ball, level);
             this.particles.update();
+
+            // Animate Movers
+            if (level.entities) {
+                for (const entity of level.entities) {
+                    if (entity.type === 'mover') {
+                        if (entity.originalX === undefined) entity.originalX = entity.x;
+                        if (entity.originalY === undefined) entity.originalY = entity.y;
+
+                        const time = Date.now() / 1000;
+                        const offset = Math.sin(time * (entity.speed || 2)) * (entity.range || 50);
+
+                        if (entity.axis === 'x') {
+                            entity.x = entity.originalX + offset;
+                        } else {
+                            entity.y = entity.originalY + offset;
+                        }
+                    }
+                    // Cooldowns
+                    if (entity.cooldown > 0) entity.cooldown--;
+                }
+            }
         }
     }
 

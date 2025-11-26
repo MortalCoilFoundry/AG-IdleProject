@@ -47,6 +47,9 @@ export class Renderer {
             }
         }
 
+        // Draw Entities (Wind, Boosts, Switches, etc.)
+        this.drawEntities(level);
+
         // Draw Walls
         this.ctx.fillStyle = this.colors.darkest;
         if (level.walls) {
@@ -61,6 +64,86 @@ export class Renderer {
             this.ctx.beginPath();
             this.ctx.arc(level.hole.x, level.hole.y, level.hole.radius, 0, Math.PI * 2);
             this.ctx.fill();
+        }
+    }
+
+    drawEntities(level) {
+        if (!level.entities) return;
+        for (const entity of level.entities) {
+            switch (entity.type) {
+                case 'wind': this.drawWind(entity); break;
+                case 'mover': this.drawMover(entity); break;
+                case 'boost': this.drawBoost(entity); break;
+                case 'switch': this.drawSwitch(entity); break;
+                case 'gate': this.drawGate(entity); break;
+            }
+        }
+    }
+
+    drawWind(entity) {
+        this.ctx.save();
+        this.ctx.fillStyle = 'rgba(139, 172, 15, 0.3)'; // Light transparent
+        this.ctx.fillRect(entity.x, entity.y, entity.width, entity.height);
+
+        // Draw simple arrows
+        this.ctx.strokeStyle = this.colors.lightest;
+        this.ctx.lineWidth = 2;
+        const centerX = entity.x + entity.width / 2;
+        const centerY = entity.y + entity.height / 2;
+
+        this.ctx.beginPath();
+        this.ctx.moveTo(centerX, centerY);
+        this.ctx.lineTo(centerX + entity.vx * 10, centerY + entity.vy * 10);
+        this.ctx.stroke();
+        this.ctx.restore();
+    }
+
+    drawMover(entity) {
+        this.ctx.fillStyle = this.colors.darkest;
+        this.ctx.fillRect(entity.x, entity.y, entity.width, entity.height);
+    }
+
+    drawBoost(entity) {
+        this.ctx.fillStyle = entity.cooldown ? this.colors.dark : this.colors.lightest;
+        this.ctx.fillRect(entity.x, entity.y, entity.width, entity.height);
+
+        // Chevron
+        if (!entity.cooldown) {
+            this.ctx.strokeStyle = this.colors.darkest;
+            this.ctx.beginPath();
+            this.ctx.moveTo(entity.x + 5, entity.y + entity.height / 2);
+            this.ctx.lineTo(entity.x + entity.width / 2, entity.y + 5);
+            this.ctx.lineTo(entity.x + entity.width - 5, entity.y + entity.height / 2);
+            this.ctx.stroke();
+        }
+    }
+
+    drawSwitch(entity) {
+        this.ctx.fillStyle = entity.active ? this.colors.lightest : this.colors.dark;
+        this.ctx.beginPath();
+        this.ctx.arc(entity.x, entity.y, entity.radius || 10, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.strokeStyle = this.colors.darkest;
+        this.ctx.stroke();
+    }
+
+    drawGate(entity) {
+        if (entity.open) {
+            this.ctx.strokeStyle = this.colors.dark;
+            this.ctx.setLineDash([5, 5]);
+            this.ctx.strokeRect(entity.x, entity.y, entity.width, entity.height);
+            this.ctx.setLineDash([]);
+        } else {
+            this.ctx.fillStyle = this.colors.darkest;
+            this.ctx.fillRect(entity.x, entity.y, entity.width, entity.height);
+            // Lock icon or X
+            this.ctx.strokeStyle = this.colors.light;
+            this.ctx.beginPath();
+            this.ctx.moveTo(entity.x, entity.y);
+            this.ctx.lineTo(entity.x + entity.width, entity.y + entity.height);
+            this.ctx.moveTo(entity.x + entity.width, entity.y);
+            this.ctx.lineTo(entity.x, entity.y + entity.height);
+            this.ctx.stroke();
         }
     }
 
