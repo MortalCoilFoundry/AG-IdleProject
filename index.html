@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Putt: Green Pocket</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas" width="600" height="600"></canvas>
+        <div id="ui-layer">
+            <div id="stroke-counter">PAR: <span id="par-value">0</span> | STROKES: <span id="strokes-value">0</span>
+            </div>
+        </div>
+        <div id="error-log"
+            style="position: absolute; top: 0; left: 0; color: red; background: rgba(0,0,0,0.8); width: 100%; display: none; font-family: monospace; padding: 10px;">
+        </div>
+    </div>
+    <script>
+        window.onerror = function (msg, url, line, col, error) {
+            const log = document.getElementById('error-log');
+            log.style.display = 'block';
+            log.innerHTML += `<div>Error: ${msg} <br> at ${url}:${line}:${col}</div>`;
+            console.error("Global Error:", msg, url, line, col, error);
+        };
+        window.addEventListener('unhandledrejection', function (event) {
+            const log = document.getElementById('error-log');
+            log.style.display = 'block';
+            log.innerHTML += `<div>Promise Rejection: ${event.reason}</div>`;
+        });
+    </script>
+    <script type="module" src="src/main.js"></script>
+</body>
+
+</html>

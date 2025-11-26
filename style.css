@@ -1,0 +1,59 @@
+:root {
+    --color-darkest: #0f380f;
+    --color-dark: #306230;
+    --color-light: #8bac0f;
+    --color-lightest: #9bbc0f;
+}
+
+body {
+    background-color: var(--color-darkest);
+    color: var(--color-lightest);
+    font-family: 'Press Start 2P', cursive;
+    /* Retro font */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    overflow: hidden;
+}
+
+#game-container {
+    position: relative;
+    border: 4px solid var(--color-lightest);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Scanline Overlay */
+#game-container::after {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+    background-size: 100% 4px;
+    z-index: 10;
+    pointer-events: none;
+}
+
+canvas {
+    display: block;
+    background-color: var(--color-light);
+    image-rendering: pixelated;
+}
+
+#ui-layer {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background-color: transparent;
+    color: var(--color-darkest);
+    padding: 0;
+    border: none;
+    font-size: 16px;
+    pointer-events: none;
+    text-shadow: 2px 2px 0px var(--color-light);
+}
