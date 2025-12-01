@@ -10,6 +10,24 @@ export class Renderer {
         this.shakeX = 0;
         this.shakeY = 0;
         this.shakeDuration = 0;
+
+        // Trail System
+        this.trailParticles = [];
+        this.maxTrailParticles = 80; // Increased to 80
+        this.trailPoolIndex = 0;
+        // Initialize pool
+        for (let i = 0; i < this.maxTrailParticles; i++) {
+            this.trailParticles.push({
+                active: false,
+                x: 0, y: 0,
+                vx: 0, vy: 0,
+                size: 1,
+                life: 0,
+                maxLife: 0,
+                initialSpeed: 0,
+                isFlash: false
+            });
+        }
     }
 
     shake(intensity) {
@@ -313,6 +331,96 @@ export class Renderer {
     }
 
     endFrame() {
+        this.ctx.restore();
+    }
+
+    addTrailParticle(x, y, vx, vy, size, isFlash = false) {
+        const p = this.trailParticles[this.trailPoolIndex];
+        p.active = true;
+        p.x = x;
+        p.y = y;
+        p.vx = vx;
+        p.vy = vy;
+        p.size = size;
+        p.isFlash = isFlash;
+
+        if (isFlash) {
+            p.life = 0.15; // Slightly longer flash
+            p.maxLife = 0.15;
+        } else {
+            p.life = 0.75; // 45 frames @ 60fps
+            p.maxLife = 0.75;
+        }
+
+        this.trailPoolIndex = (this.trailPoolIndex + 1) % this.maxTrailParticles;
+    }
+
+    updateTrailParticles(dt) {
+        for (const p of this.trailParticles) {
+            if (!p.active) continue;
+
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+
+            if (p.life <= 0) {
+                p.active = false;
+            }
+        }
+    }
+
+    drawTrail() {
+        this.ctx.save();
+
+        // Helper to get alpha based on life curve
+        // Full 1.0 for first 0.3s, then linear fade
+        const getAlpha = (p) => {
+            if (p.isFlash) return p.life / p.maxLife;
+
+            // 0.75s total. 0.3s hold.
+            // If life > (0.75 - 0.3) = 0.45, alpha is 1.
+            // Else, alpha is life / 0.45
+            if (p.life > 0.45) return 1.0;
+            return p.life / 0.45;
+        };
+
+        // Pass 1: Bright Glow (Inner)
+        // Size * 4.0, Alpha 0.5, Color #9bbc0f
+        this.ctx.fillStyle = this.colors.lightest; // #9bbc0f
+        for (const p of this.trailParticles) {
+            if (!p.active) continue;
+            const baseAlpha = getAlpha(p);
+            this.ctx.globalAlpha = baseAlpha * 0.5;
+            const size = p.isFlash ? p.size * 2.0 : p.size * 4.0;
+            this.ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+        }
+
+        // Pass 2: Soft Bloom (Outer)
+        // Size * 6.0, Alpha 0.2, Color #9bbc0f
+        for (const p of this.trailParticles) {
+            if (!p.active) continue;
+            const baseAlpha = getAlpha(p);
+            this.ctx.globalAlpha = baseAlpha * 0.2;
+            const size = p.isFlash ? p.size * 3.0 : p.size * 6.0;
+            this.ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+        }
+
+        // Pass 3: Core (The Soul)
+        // Color #306230 (Dark Green) ALWAYS
+        for (const p of this.trailParticles) {
+            if (!p.active) continue;
+            this.ctx.globalAlpha = getAlpha(p);
+
+            if (p.isFlash) {
+                // Flash core is also dark for that "spark" look
+                this.ctx.fillStyle = this.colors.dark; // #306230
+            } else {
+                this.ctx.fillStyle = this.colors.dark; // #306230
+            }
+
+            this.ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        }
+
         this.ctx.restore();
     }
 }
