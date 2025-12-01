@@ -45,4 +45,48 @@ export class AudioController {
         setTimeout(() => this.playTone(400, 'square', 0.2), 200);
         setTimeout(() => this.playTone(500, 'square', 0.4), 400);
     }
+
+    startWind(zones) {
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+        if (this.windOsc) return; // Already playing
+
+        const totalStr = zones.reduce((sum, z) => sum + z.strength, 0);
+        const avgStr = totalStr / zones.length;
+
+        this.windOsc = this.ctx.createOscillator();
+        this.windGain = this.ctx.createGain();
+
+        this.windOsc.type = 'sine'; // Softer sound
+        // Lower pitch: Base 60Hz + 15Hz per strength unit
+        this.windOsc.frequency.setValueAtTime(60 + avgStr * 15, this.ctx.currentTime);
+
+        // Fade in with lower max gain
+        this.windGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        this.windGain.gain.linearRampToValueAtTime(0.03, this.ctx.currentTime + 0.5);
+
+        this.windOsc.connect(this.windGain);
+        this.windGain.connect(this.ctx.destination);
+
+        this.windOsc.start();
+    }
+
+    stopWind() {
+        if (!this.windOsc) return;
+
+        const now = this.ctx.currentTime;
+        this.windGain.gain.cancelScheduledValues(now);
+        this.windGain.gain.setValueAtTime(this.windGain.gain.value, now);
+        this.windGain.gain.linearRampToValueAtTime(0, now + 0.5);
+
+        const osc = this.windOsc;
+        osc.stop(now + 0.5);
+        setTimeout(() => {
+            osc.disconnect();
+        }, 600);
+
+        this.windOsc = null;
+        this.windGain = null;
+    }
 }

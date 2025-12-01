@@ -159,20 +159,160 @@ export class Renderer {
         this.ctx.stroke();
     }
 
-    drawAimLine(ball, dragVector) {
-        if (!dragVector) return;
+    drawAimLine(ball, trajectory) {
+        if (!trajectory || trajectory.length < 2) return;
 
-        this.ctx.strokeStyle = this.colors.darkest;
-        this.ctx.setLineDash([5, 5]);
+        this.ctx.strokeStyle = this.colors.lightest;
+        this.ctx.setLineDash([3, 3]);
         this.ctx.lineWidth = 2;
 
         this.ctx.beginPath();
-        this.ctx.moveTo(ball.x, ball.y);
-        // Draw line opposite to drag
-        this.ctx.lineTo(ball.x - dragVector.x, ball.y - dragVector.y);
+        this.ctx.moveTo(trajectory[0].x, trajectory[0].y);
+        for (let i = 1; i < trajectory.length; i++) {
+            this.ctx.lineTo(trajectory[i].x, trajectory[i].y);
+        }
         this.ctx.stroke();
 
         this.ctx.setLineDash([]);
-        this.ctx.restore(); // Restore from clear() translate
+    }
+
+    initWindEmitters(zones) {
+        this.windZones = zones.map(z => ({
+            ...z,
+            emitTimer: 0,
+            maxParticles: z.strength * 5
+        }));
+        this.activeWindParticles = {};
+        zones.forEach(z => this.activeWindParticles[z.id] = 0);
+        this.windParticles = [];
+    }
+
+    resetWindEmitters() {
+        this.windZones = [];
+        this.activeWindParticles = {};
+        this.windParticles = [];
+    }
+
+    updateWindEmitters(dt) {
+        if (!this.windZones) return;
+
+        // Spawn new particles
+        for (const z of this.windZones) {
+            z.emitTimer += dt;
+            // Limit active particles per zone to avoid overcrowding
+            if (this.activeWindParticles[z.id] < z.maxParticles && z.emitTimer > 0.1 / z.strength) {
+                z.emitTimer = 0;
+                this.activeWindParticles[z.id]++;
+
+                // Random position within zone
+                const x = z.zone.x + Math.random() * z.zone.width;
+                const y = z.zone.y + Math.random() * z.zone.height;
+
+                this.windParticles.push({
+                    x: x,
+                    y: y,
+                    vx: z.vector[0] * 50, // Base speed
+                    vy: z.vector[1] * 50,
+                    life: 0,
+                    maxLife: 1.0 + Math.random() * 0.5,
+                    zoneId: z.id,
+                    swirlPhase: Math.random() * Math.PI * 2,
+                    trail: [] // For trail drawing
+                });
+            }
+        }
+
+        // Update existing particles
+        const time = performance.now() * 0.003;
+        for (let i = this.windParticles.length - 1; i >= 0; i--) {
+            const p = this.windParticles[i];
+            p.life += dt;
+
+            // Swirl effect
+            const swirlX = Math.sin(time + p.swirlPhase) * 10;
+            const swirlY = Math.cos(time + p.swirlPhase) * 10;
+
+            p.x += (p.vx + swirlX) * dt;
+            p.y += (p.vy + swirlY) * dt;
+
+            // Update trail
+            p.trail.push({ x: p.x, y: p.y });
+            if (p.trail.length > 5) p.trail.shift();
+
+            if (p.life >= p.maxLife) {
+                if (this.activeWindParticles[p.zoneId]) this.activeWindParticles[p.zoneId]--;
+                this.windParticles.splice(i, 1);
+            }
+        }
+    }
+
+    drawWindParticles() {
+        if (!this.windParticles) return;
+
+        this.ctx.save();
+        for (const p of this.windParticles) {
+            const alpha = 1 - (p.life / p.maxLife);
+            this.ctx.globalAlpha = alpha;
+
+            // Draw Trail
+            if (p.trail.length > 1) {
+                this.ctx.strokeStyle = this.colors.lightest;
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                this.ctx.moveTo(p.trail[0].x, p.trail[0].y);
+                for (let i = 1; i < p.trail.length; i++) {
+                    this.ctx.lineTo(p.trail[i].x, p.trail[i].y);
+                }
+                this.ctx.stroke();
+            }
+
+            // Draw Head
+            this.ctx.fillStyle = this.colors.lightest;
+            this.ctx.fillRect(p.x, p.y, 2, 2);
+        }
+        this.ctx.restore();
+    }
+
+    drawDebugArrows(zones) {
+        this.ctx.save();
+        for (const z of zones) {
+            const centerX = z.zone.x + z.zone.width / 2;
+            const centerY = z.zone.y + z.zone.height / 2;
+            const angle = Math.atan2(z.vector[1], z.vector[0]);
+
+            this.ctx.translate(centerX, centerY);
+            this.ctx.rotate(angle);
+
+            // Chevron
+            this.ctx.fillStyle = this.colors.dark;
+            this.ctx.fillRect(-3, -2, 6, 4); // Background
+
+            this.ctx.strokeStyle = this.colors.lightest;
+            this.ctx.lineWidth = 2;
+            this.ctx.beginPath();
+            this.ctx.moveTo(-2, -2);
+            this.ctx.lineTo(2, 0);
+            this.ctx.lineTo(-2, 2);
+            this.ctx.stroke();
+
+            this.ctx.rotate(-angle);
+            this.ctx.translate(-centerX, -centerY);
+        }
+        this.ctx.restore();
+    }
+
+    drawDebugZones(zones) {
+        this.ctx.save();
+        this.ctx.strokeStyle = '#ff0000';
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([5, 5]);
+        for (const z of zones) {
+            this.ctx.strokeRect(z.zone.x, z.zone.y, z.zone.width, z.zone.height);
+        }
+        this.ctx.restore();
+    }
+
+    endFrame() {
+        this.ctx.restore();
     }
 }

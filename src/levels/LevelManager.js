@@ -266,4 +266,26 @@ export class LevelManager {
         this.currentLevelIndex = 0;
         return this.getCurrentLevel();
     }
+
+    getWindZones() {
+        const level = this.getCurrentLevel();
+        if (!level || !level.entities) return [];
+
+        return level.entities
+            .filter(e => e.type === 'wind')
+            .map((e, index) => {
+                // Derive strength from vector magnitude if not explicit
+                // e.g. magnitude 0.1 -> strength 2
+                const magnitude = Math.sqrt(e.vx * e.vx + e.vy * e.vy);
+                const derivedStrength = Math.min(3, Math.max(1, Math.ceil(magnitude / 0.05)));
+
+                return {
+                    id: `wind_${index}`,
+                    zone: { x: e.x, y: e.y, width: e.width, height: e.height },
+                    vector: [e.vx, e.vy],
+                    strength: e.strength || derivedStrength,
+                    emitStyle: e.emitStyle || 'swirl'
+                };
+            });
+    }
 }

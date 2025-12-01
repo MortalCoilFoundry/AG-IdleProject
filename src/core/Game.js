@@ -97,6 +97,40 @@ export class Game {
             }
         });
 
+        eventBus.on('WIND_ZONES_ACTIVE', (zones) => {
+            this.renderer.initWindEmitters(zones);
+            this.audio.startWind(zones);
+        });
+
+        // Debug toggles (optional, for dev)
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'd') this.debugMode = !this.debugMode;
+            if (e.key === 'w') this.showWindArrows = !this.showWindArrows;
+        });
+
+        // Debug Level Select
+        const levelSelect = document.getElementById('level-select');
+        console.log("Debug: levelSelect found?", levelSelect);
+        console.log("Debug: Levels available:", this.levelManager.levels.length);
+
+        if (levelSelect) {
+            this.levelManager.levels.forEach((level, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.text = `Level ${index + 1}`;
+                levelSelect.appendChild(option);
+            });
+
+            levelSelect.addEventListener('change', (e) => {
+                this.levelManager.currentLevelIndex = parseInt(e.target.value);
+                this.renderer.resetWindEmitters();
+                this.audio.stopWind();
+                this.loadLevel();
+                // Remove focus so keyboard controls still work
+                e.target.blur();
+            });
+        }
+
         this.start();
     }
 
@@ -127,6 +161,15 @@ export class Game {
 
         this.strokes = 0;
         this.updateUI();
+
+        // Check for wind zones
+        const windZones = this.levelManager.getWindZones();
+        if (windZones.length > 0) {
+            eventBus.emit('WIND_ZONES_ACTIVE', windZones);
+        } else {
+            this.renderer.resetWindEmitters();
+            this.audio.stopWind();
+        }
     }
 
     nextLevel() {
@@ -137,6 +180,8 @@ export class Game {
 
         const next = this.levelManager.nextLevel();
         if (next) {
+            this.renderer.resetWindEmitters(); // Clear particles
+            this.audio.stopWind();
             this.loadLevel();
         } else {
             this.showEndScreen();
@@ -188,6 +233,7 @@ export class Game {
     update(dt) {
         const level = this.levelManager.getCurrentLevel();
         if (level) {
+            this.renderer.updateWindEmitters(dt); // Update wind before physics
             this.physics.update(this.ball, level);
             this.particles.update();
 
@@ -220,13 +266,26 @@ export class Game {
         const level = this.levelManager.getCurrentLevel();
         if (level) {
             this.renderer.drawLevel(level);
+            this.renderer.drawWindParticles();
+
+            if (this.showWindArrows) {
+                const windZones = this.levelManager.getWindZones();
+                this.renderer.drawDebugArrows(windZones);
+            }
+            if (this.debugMode) {
+                const windZones = this.levelManager.getWindZones();
+                this.renderer.drawDebugZones(windZones);
+            }
+
             this.particles.draw(this.ctx); // Draw particles below ball
             this.renderer.drawBall(this.ball);
 
             if (!this.ball.isMoving && this.input.isDragging) {
-                const drag = this.input.getDragVector();
-                this.renderer.drawAimLine(this.ball, drag);
+                const trajectory = this.input.getAimPreview(level);
+                this.renderer.drawAimLine(this.ball, trajectory);
             }
+
+            this.renderer.endFrame();
         }
     }
 }
