@@ -99,7 +99,7 @@ export class Game {
 
         eventBus.on('WIND_ZONES_ACTIVE', (zones) => {
             this.renderer.initWindEmitters(zones);
-            this.audio.startWind(zones);
+            this.audio.setWind(zones);
         });
 
         // Debug toggles (optional, for dev)
@@ -124,12 +124,21 @@ export class Game {
             levelSelect.addEventListener('change', (e) => {
                 this.levelManager.currentLevelIndex = parseInt(e.target.value);
                 this.renderer.resetWindEmitters();
-                this.audio.stopWind();
+                this.audio.setWind([]);
                 this.loadLevel();
                 // Remove focus so keyboard controls still work
                 e.target.blur();
             });
         }
+
+        // Resume Audio Context on first interaction
+        const resumeAudio = () => {
+            this.audio.resume();
+            window.removeEventListener('mousedown', resumeAudio);
+            window.removeEventListener('keydown', resumeAudio);
+        };
+        window.addEventListener('mousedown', resumeAudio);
+        window.addEventListener('keydown', resumeAudio);
 
         this.start();
     }
@@ -168,7 +177,7 @@ export class Game {
             eventBus.emit('WIND_ZONES_ACTIVE', windZones);
         } else {
             this.renderer.resetWindEmitters();
-            this.audio.stopWind();
+            this.audio.setWind([]);
         }
     }
 
@@ -181,7 +190,7 @@ export class Game {
         const next = this.levelManager.nextLevel();
         if (next) {
             this.renderer.resetWindEmitters(); // Clear particles
-            this.audio.stopWind();
+            this.audio.setWind([]);
             this.loadLevel();
         } else {
             this.showEndScreen();
@@ -233,6 +242,7 @@ export class Game {
     update(dt) {
         const level = this.levelManager.getCurrentLevel();
         if (level) {
+            this.audio.update(dt); // Update audio engine (gusts)
             this.renderer.updateWindEmitters(dt); // Update wind before physics
             this.physics.update(this.ball, level);
             this.particles.update();

@@ -211,8 +211,8 @@ export class Renderer {
                 this.windParticles.push({
                     x: x,
                     y: y,
-                    vx: z.vector[0] * 50, // Base speed
-                    vy: z.vector[1] * 50,
+                    vx: z.vector[0] * 100, // Increased speed (was 50)
+                    vy: z.vector[1] * 100,
                     life: 0,
                     maxLife: 1.0 + Math.random() * 0.5,
                     zoneId: z.id,
@@ -229,15 +229,15 @@ export class Renderer {
             p.life += dt;
 
             // Swirl effect
-            const swirlX = Math.sin(time + p.swirlPhase) * 10;
-            const swirlY = Math.cos(time + p.swirlPhase) * 10;
+            const swirlX = Math.sin(time + p.swirlPhase) * 20; // Increased swirl (was 10)
+            const swirlY = Math.cos(time + p.swirlPhase) * 20;
 
             p.x += (p.vx + swirlX) * dt;
             p.y += (p.vy + swirlY) * dt;
 
             // Update trail
             p.trail.push({ x: p.x, y: p.y });
-            if (p.trail.length > 5) p.trail.shift();
+            if (p.trail.length > 8) p.trail.shift(); // Longer trail (was 5)
 
             if (p.life >= p.maxLife) {
                 if (this.activeWindParticles[p.zoneId]) this.activeWindParticles[p.zoneId]--;
@@ -268,7 +268,7 @@ export class Renderer {
 
             // Draw Head
             this.ctx.fillStyle = this.colors.lightest;
-            this.ctx.fillRect(p.x, p.y, 2, 2);
+            this.ctx.fillRect(p.x, p.y, 3, 3); // Larger size (was 2x2)
         }
         this.ctx.restore();
     }
