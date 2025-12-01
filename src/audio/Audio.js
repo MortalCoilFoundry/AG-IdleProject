@@ -2,8 +2,13 @@ export class AudioController {
     constructor() {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this.windInitialized = false;
+        this.sourcesStarted = false; // Flag to track if sources have started
         this.gustTimer = 0;
         this.nextGustTime = 2.5;
+        this.silenceTimer = 0;
+        this.nextSilenceTime = 10;
+        this.isSilent = false;
+        this.currentWindStrength = 0;
     }
 
     playTone(freq, type, duration) {
@@ -27,13 +32,11 @@ export class AudioController {
     }
 
     playHit() {
-        // Shoot sound
         this.playTone(150, 'square', 0.1);
         setTimeout(() => this.playTone(100, 'square', 0.1), 50);
     }
 
     playWallHit() {
-        // Thud
         this.playTone(100, 'sawtooth', 0.05);
     }
 
@@ -53,21 +56,38 @@ export class AudioController {
         if (this.ctx.state === 'suspended') {
             this.ctx.resume();
         }
+        // Start sources on first user interaction if initialized
+        if (this.windInitialized && !this.sourcesStarted) {
+            this.startSources();
+        }
     }
 
     initWind() {
         if (this.windInitialized) return;
         this.windInitialized = true;
 
-        // Node Graph: [Osc1, Osc2] -> [GustGain] -> [MasterGain] -> [Destination]
+        // Node Graph: 
+        // [Osc1, Osc2] -> [TriangleGain] -> [MasterGain]
+        // [PinkNoise] -> [Filter1] -> [Filter2] -> [Filter3] -> [NoiseGain] -> [BreathingMultiplier] -> [MasterGain]
+        // [BreathingLFO] -> [BreathingGain] -> [BreathingMultiplier.gain]
+        // [MasterGain] -> [Destination]
 
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = 0;
+        this.masterGain.gain.value = 1.0; // Locked at 1.0
         this.masterGain.connect(this.ctx.destination);
 
-        this.gustGain = this.ctx.createGain();
-        this.gustGain.gain.value = 1.0;
-        this.gustGain.connect(this.masterGain);
+        this.triangleGain = this.ctx.createGain();
+        this.triangleGain.gain.value = 0;
+        this.triangleGain.connect(this.masterGain);
+
+        // Breathing Multiplier (Modulates Noise)
+        this.breathingMultiplier = this.ctx.createGain();
+        this.breathingMultiplier.gain.value = 1.0; // Default unity
+        this.breathingMultiplier.connect(this.masterGain);
+
+        this.noiseGain = this.ctx.createGain();
+        this.noiseGain.gain.value = 0.445;
+        this.noiseGain.connect(this.breathingMultiplier);
 
         // Oscillators
         this.windOsc1 = this.ctx.createOscillator();
@@ -81,20 +101,92 @@ export class AudioController {
         this.lfoOsc = this.ctx.createOscillator();
         this.lfoGain = this.ctx.createGain();
         this.lfoOsc.type = 'sine';
-        this.lfoOsc.frequency.value = 0.2; // 0.2Hz
-        this.lfoGain.gain.value = 3; // ±3Hz
+        this.lfoOsc.frequency.value = 0.2;
+        this.lfoGain.gain.value = 3;
 
         this.lfoOsc.connect(this.lfoGain);
         this.lfoGain.connect(this.windOsc1.frequency);
         this.lfoGain.connect(this.windOsc2.frequency);
 
-        this.windOsc1.connect(this.gustGain);
-        this.windOsc2.connect(this.gustGain);
+        this.windOsc1.connect(this.triangleGain);
+        this.windOsc2.connect(this.triangleGain);
 
-        // Start everything forever
+        // Breathing LFO (Ultra-slow, random per session)
+        this.breathingLfo = this.ctx.createOscillator();
+        this.breathingGain = this.ctx.createGain();
+        this.breathingLfo.type = 'sine';
+        // Random freq between 0.022 and 0.035 Hz (28-45s cycle)
+        this.breathingLfo.frequency.value = 0.022 + Math.random() * 0.013;
+        this.breathingGain.gain.value = 0.3; // depth
+
+        this.breathingLfo.connect(this.breathingGain);
+        this.breathingGain.connect(this.breathingMultiplier.gain);
+
+        // Add DC offset by setting default multiplier bias
+        this.breathingMultiplier.gain.setValueAtTime(1.0, this.ctx.currentTime);
+    }
+
+    async startSources() {
+        if (this.sourcesStarted) return;
+        this.sourcesStarted = true;
+
+        // Cascaded Lowpass Filters (Created here to ensure context is ready)
+        this.filter1 = this.ctx.createBiquadFilter();
+        this.filter1.type = 'lowpass';
+        this.filter1.frequency.value = 400;
+
+        this.filter2 = this.ctx.createBiquadFilter();
+        this.filter2.type = 'lowpass';
+        this.filter2.frequency.value = 250;
+
+        this.filter3 = this.ctx.createBiquadFilter();
+        this.filter3.type = 'lowpass';
+        this.filter3.frequency.value = 100;
+
+        // Connect filters to each other and to noiseGain
+        this.filter1.connect(this.filter2);
+        this.filter2.connect(this.filter3);
+        this.filter3.connect(this.noiseGain);
+
+        // Lock filters to calm values initially
+        this.filter1.frequency.setValueAtTime(400, 0);
+        this.filter2.frequency.setValueAtTime(250, 0);
+        this.filter3.frequency.setValueAtTime(100, 0);
+
+        // Pink Noise (AudioWorklet -> Biquads)
+        try {
+            await this.ctx.audioWorklet.addModule('src/audio/NoiseProcessor.js');
+            this.noiseNode = new AudioWorkletNode(this.ctx, 'noise-processor');
+        } catch (e) {
+            console.error("Failed to load AudioWorklet, falling back to ScriptProcessor", e);
+            // Fallback if needed
+            const bufferSize = 4096;
+            this.noiseNode = this.ctx.createScriptProcessor(bufferSize, 1, 1);
+            this.noiseNode.onaudioprocess = (e) => {
+                const output = e.outputBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = Math.random() * 2 - 1;
+                }
+            };
+        }
+
+        // Connect Noise to Filter Chain
+        this.noiseNode.connect(this.filter1);
+
         this.windOsc1.start();
         this.windOsc2.start();
         this.lfoOsc.start();
+        this.breathingLfo.start();
+    }
+
+    ensureCalmFilters() {
+        if (!this.filter1) return;
+        const now = this.ctx.currentTime;
+        [this.filter1, this.filter2, this.filter3].forEach((filter, i) => {
+            const baseFreq = [400, 250, 100][i];
+            filter.frequency.cancelScheduledValues(now);
+            filter.frequency.setValueAtTime(baseFreq, now);
+        });
     }
 
     setWind(zones) {
@@ -103,51 +195,153 @@ export class AudioController {
         const now = this.ctx.currentTime;
         const hasWind = zones && zones.length > 0;
 
-        // Calculate target parameters
-        let targetGain = 0;
         let targetFreq = 60;
+        this.currentWindStrength = 0;
 
         if (hasWind) {
             const totalStr = zones.reduce((sum, z) => sum + z.strength, 0);
             const avgStr = totalStr / zones.length;
-            targetGain = 0.08;
+            this.currentWindStrength = avgStr;
             targetFreq = 60 + avgStr * 15;
         }
 
-        // Ramp Master Gain (Volume)
-        this.masterGain.gain.cancelScheduledValues(now);
-        this.masterGain.gain.setTargetAtTime(targetGain, now, 0.5); // Smooth fade
+        // === ONLY APPLY CALM BREATHING IF WE ARE ACTUALLY IN CALM STATE ===
+        if (this.currentWindStrength <= 0) {
+            // Enable breathing + higher base
+            this.noiseGain.gain.cancelScheduledValues(now);
+            this.noiseGain.gain.setTargetAtTime(0.25, now, 4.0);  // Slightly higher base
 
-        // Ramp Frequency (Pitch)
+            this.breathingGain.gain.cancelScheduledValues(now);
+            this.breathingGain.gain.setTargetAtTime(0.4, now, 4.0);  // Stronger swell: 0.015 → 0.041
+
+            // Force filters to stay calm
+            this.ensureCalmFilters();
+        }
+        // === WHEN WIND IS ACTIVE: lock to normal floor (gusts will boost it) ===
+        else {
+            // Only set base floor if not already there — prevents killing breathing
+            if (this.noiseGain.gain.value > 0.04 || this.breathingGain.gain.value > 0.1) {
+                this.noiseGain.gain.cancelScheduledValues(now);
+                this.noiseGain.gain.setTargetAtTime(0.015, now, 4.0);
+
+                this.breathingGain.gain.cancelScheduledValues(now);
+                this.breathingGain.gain.setTargetAtTime(0.0, now, 4.0);
+            }
+        }
+
+        // Pitch ramp (always safe)
         this.windOsc1.frequency.cancelScheduledValues(now);
-        this.windOsc1.frequency.setTargetAtTime(targetFreq, now, 0.5);
+        this.windOsc1.frequency.setTargetAtTime(targetFreq, now, 2.0);
 
         this.windOsc2.frequency.cancelScheduledValues(now);
-        this.windOsc2.frequency.setTargetAtTime(targetFreq + 4, now, 0.5);
+        this.windOsc2.frequency.setTargetAtTime(targetFreq + 4, now, 2.0);
     }
 
     update(dt) {
         if (!this.windInitialized) return;
 
-        // Only process gusts if wind is audible
-        if (this.masterGain.gain.value < 0.01) return;
+        // Only process effects if wind is theoretically active
+        if (this.currentWindStrength <= 0) {
+            // If no wind, we might still want the floor, but maybe not gusts?
+            // User said "pink noise floor must be truly always-on".
+            // Gusts are wind events. If wind strength is 0, no gusts.
+            return;
+        }
 
+        // Gusts
         this.gustTimer += dt;
         if (this.gustTimer > this.nextGustTime) {
             this.triggerGust();
             this.gustTimer = 0;
-            this.nextGustTime = 2.0 + Math.random() * 3.0; // Random interval 2-5s
+            this.nextGustTime = 2.0 + Math.random() * 3.0;
+        }
+
+        // Silence Gaps
+        if (!this.isSilent) {
+            this.silenceTimer += dt;
+            if (this.silenceTimer > this.nextSilenceTime) {
+                const chance = Math.max(0.1, 0.6 - (this.currentWindStrength * 0.1));
+
+                if (Math.random() < chance) {
+                    this.triggerSilence();
+                } else {
+                    this.silenceTimer = 0;
+                    this.nextSilenceTime = 5 + Math.random() * 5;
+                }
+            }
         }
     }
 
+    triggerSilence() {
+        this.isSilent = true;
+        const now = this.ctx.currentTime;
+        const fadeOutTime = 2 + Math.random() * 2;
+        const gapDuration = 1 + Math.random() * 3;
+        const fadeInTime = 2 + Math.random() * 2;
+
+        // Kill Triangles Only
+        this.triangleGain.gain.cancelScheduledValues(now);
+        this.triangleGain.gain.setTargetAtTime(0, now, fadeOutTime / 3);
+
+        // Keep Pink Noise at Floor (0.015)
+        this.noiseGain.gain.cancelScheduledValues(now);
+        this.noiseGain.gain.setTargetAtTime(0.015, now, fadeOutTime / 3);
+
+        // Schedule return
+        setTimeout(() => {
+            if (!this.windInitialized) return;
+            const wakeTime = this.ctx.currentTime;
+
+            // Restore Triangles (to base level, which is 0, wait for gust)
+            this.triangleGain.gain.cancelScheduledValues(wakeTime);
+            this.triangleGain.gain.setTargetAtTime(0, wakeTime, fadeInTime / 3);
+
+            this.isSilent = false;
+            this.silenceTimer = 0;
+            this.nextSilenceTime = 10 + Math.random() * 10;
+        }, (fadeOutTime + gapDuration) * 1000);
+    }
+
     triggerGust() {
+        // Guard: No gusts if calm
+        if (this.currentWindStrength <= 0) return;
+        if (this.isSilent) return;
+
         const now = this.ctx.currentTime;
         const duration = 0.5 + Math.random();
-        const boost = 0.5 + Math.random() * 0.5; // Boost gust gain to 1.5-2.0
 
-        this.gustGain.gain.cancelScheduledValues(now);
-        this.gustGain.gain.setValueAtTime(this.gustGain.gain.value, now);
-        this.gustGain.gain.linearRampToValueAtTime(1.0 + boost, now + 0.2);
-        this.gustGain.gain.linearRampToValueAtTime(1.0, now + duration);
+        // Target Levels
+        // Pink Noise Boost: 0.015 -> ~0.06-0.09
+        const pinkTarget = 0.06 + Math.random() * 0.03;
+
+        // Triangle Boost: 0 -> ~0.008-0.012
+        // Constraint: Triangles < 15% of Pink
+        const triTarget = 0.008 + Math.random() * 0.004;
+
+        // 1. Pink Noise Boost (Immediate)
+        this.noiseGain.gain.cancelScheduledValues(now);
+        this.noiseGain.gain.setValueAtTime(this.noiseGain.gain.value, now);
+        this.noiseGain.gain.linearRampToValueAtTime(pinkTarget, now + 0.5);
+        this.noiseGain.gain.exponentialRampToValueAtTime(0.015, now + 0.5 + 8.0); // Ultra-long tail
+
+        // 2. Triangle Boost (Delayed 200ms)
+        const triStart = now + 0.2;
+        this.triangleGain.gain.cancelScheduledValues(now);
+        this.triangleGain.gain.setValueAtTime(this.triangleGain.gain.value, now);
+        this.triangleGain.gain.setValueAtTime(this.triangleGain.gain.value, triStart);
+        this.triangleGain.gain.linearRampToValueAtTime(triTarget, triStart + 0.5);
+        this.triangleGain.gain.exponentialRampToValueAtTime(0.0001, triStart + 0.5 + 8.0); // Tail to near zero
+
+        // Filter Sweep
+        const filterAttack = 2.0;
+        const filterDecay = 6.0;
+
+        [this.filter1, this.filter2, this.filter3].forEach((filter, i) => {
+            const baseFreq = [400, 250, 100][i];
+            filter.frequency.cancelScheduledValues(now);
+            filter.frequency.setValueAtTime(filter.frequency.value, now);
+            filter.frequency.exponentialRampToValueAtTime(1600, now + filterAttack);
+            filter.frequency.exponentialRampToValueAtTime(baseFreq, now + filterAttack + filterDecay);
+        });
     }
 }
