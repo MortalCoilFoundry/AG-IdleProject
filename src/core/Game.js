@@ -10,6 +10,13 @@ export class Game {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
         this.ctx = this.canvas.getContext('2d');
+
+        // Force canvas drawing buffer to stay 600×600 (already done in Renderer)
+        // Ensure CSS size doesn't fight the logical resolution
+        this.canvas.style.width = '';
+        this.canvas.style.height = '';
+        // Let CSS fully control display size → input coordinates now match perfectly
+        this.canvas.style.imageRendering = 'pixelated';
         this.lastTime = 0;
         this.isRunning = false;
 
@@ -230,19 +237,6 @@ export class Game {
     loop(timestamp) {
         if (!this.isRunning) return;
 
-        const deltaTime = (timestamp - this.lastTime) / 1000;
-        this.lastTime = timestamp;
-
-        this.update(deltaTime);
-        this.draw();
-        this.input = new Input(this.canvas, this.ball);
-
-        eventBus.on('STROKE_TAKEN', () => {
-            this.strokes++;
-            this.updateUI();
-            this.audio.playHit();
-            this.particles.emit(this.ball.x, this.ball.y, '#9bbc0f', 10, 5); // Burst on shoot
-        });
 
         eventBus.on('HOLE_REACHED', () => {
             this.audio.playHole();
@@ -491,6 +485,7 @@ export class Game {
 
     draw() {
         this.renderer.clear();
+        this.renderer.startScene(); // <--- Start Viewport Clip
 
         const level = this.levelManager.getCurrentLevel();
         if (level) {
@@ -514,8 +509,9 @@ export class Game {
                 const trajectory = this.input.getAimPreview(level);
                 this.renderer.drawAimLine(this.ball, trajectory);
             }
-
-            this.renderer.endFrame();
         }
+
+        this.renderer.endScene(); // <--- End Viewport Clip
+
     }
 }

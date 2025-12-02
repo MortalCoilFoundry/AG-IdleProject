@@ -13,19 +13,42 @@
 
 <body>
     <div id="game-container">
-        <canvas id="game-canvas" width="600" height="600"></canvas>
-        <div id="ui-layer">
-            <div id="stroke-counter">PAR: <span id="par-value">0</span> | STROKES: <span id="strokes-value">0</span>
+        <!-- Top Ribbon -->
+        <div id="top-ribbon">
+            <button id="menu-btn" class="ribbon-btn">≡</button>
+            <div id="title">Retro Putt</div>
+            <div id="stats">
+                <span>★ <span id="total-stars">0</span></span>
+                <span>PAR <span id="par-value">0</span></span>
+                <span>○ <span id="strokes-value">0</span></span>
             </div>
         </div>
-        <div id="debug-controls" style="position: absolute; top: 10px; right: 10px; pointer-events: auto;">
-            <select id="level-select">
-                <option value="" disabled selected>Select Level</option>
-            </select>
+
+        <!-- Gameplay Canvas (now centered with padding) -->
+        <canvas id="game-canvas" width="540" height="540"></canvas>
+
+        <!-- Bottom Ribbon -->
+        <div id="bottom-ribbon">
+            <button data-section="courses">&lt;</button>
+            <button data-section="courses">Courses</button>
+            <button data-section="balls">Balls</button>
+            <button data-section="settings">Settings</button>
+            <button data-section="editor">Editor</button>
+            <button data-section="courses">&gt;</button>
         </div>
-        <div id="error-log"
-            style="position: absolute; top: 0; left: 0; color: red; background: rgba(0,0,0,0.8); width: 100%; display: none; font-family: monospace; padding: 10px;">
+
+        <!-- Modal Container -->
+        <div id="modal-overlay">
+            <div id="modal-container"></div>
         </div>
+
+        <!-- Keep debug controls if needed -->
+        <div id="debug-controls">…</div>
+    </div>
+
+    <div id="debug-console"
+        style="position: fixed; top: 60px; left: 0; width: 300px; height: 400px; background: rgba(0,0,0,0.8); color: lime; font-family: monospace; font-size: 10px; overflow-y: auto; z-index: 9999; pointer-events: none; padding: 5px;">
+        Debug Log...
     </div>
     <script>
         window.onerror = function (msg, url, line, col, error) {

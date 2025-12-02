@@ -1,6 +1,20 @@
 export class Renderer {
     constructor(ctx) {
         this.ctx = ctx;
+
+        // ────── CANVAS LAYOUT CONSTANTS (CRITICAL) ──────
+        // ────── CANVAS LAYOUT CONSTANTS (CRITICAL) ──────
+        this.LOGICAL_WIDTH = 600;   // Your game is designed for 600×600
+        this.LOGICAL_HEIGHT = 600;
+        this.VIEWPORT_W = 540;   // What the player actually sees
+        this.VIEWPORT_H = 540;
+        this.VIEWPORT_X = 30;    // (600 - 540) / 2
+        this.VIEWPORT_Y = 60;    // Top ribbon height
+
+        // Force canvas resolution to match logical size for 1:1 pixels
+        this.ctx.canvas.width = this.LOGICAL_WIDTH;
+        this.ctx.canvas.height = this.LOGICAL_HEIGHT;
+
         this.colors = {
             darkest: '#0f380f',
             dark: '#306230',
@@ -49,11 +63,29 @@ export class Renderer {
 
     clear() {
         this.updateShake();
-        this.ctx.save();
-        this.ctx.translate(this.shakeX, this.shakeY);
+        // Clear to transparent - let DOM ribbons/background show through
+        this.ctx.clearRect(0, 0, this.LOGICAL_WIDTH, this.LOGICAL_HEIGHT);
+    }
 
+    startScene() {
+        this.ctx.save();
+
+        // 1. Define Viewport Clip
+        this.ctx.beginPath();
+        this.ctx.rect(this.VIEWPORT_X, this.VIEWPORT_Y, this.VIEWPORT_W, this.VIEWPORT_H);
+        this.ctx.clip();
+
+        // 2. Apply Camera/Shake
+        // Shake moves the world inside the viewport
+        this.ctx.translate(this.VIEWPORT_X + this.shakeX, this.VIEWPORT_Y + this.shakeY);
+
+        // 3. Draw Game Background (clipped to viewport)
         this.ctx.fillStyle = this.colors.light;
-        this.ctx.fillRect(-10, -10, 620, 620); // Oversize to cover shake
+        this.ctx.fillRect(0, 0, this.LOGICAL_WIDTH, this.LOGICAL_HEIGHT);
+    }
+
+    endScene() {
+        this.ctx.restore();
     }
 
     drawLevel(level) {
@@ -330,9 +362,8 @@ export class Renderer {
         this.ctx.restore();
     }
 
-    endFrame() {
-        this.ctx.restore();
-    }
+    // endFrame removed, use endScene instead
+
 
     addTrailParticle(x, y, vx, vy, size, isFlash = false) {
         const p = this.trailParticles[this.trailPoolIndex];

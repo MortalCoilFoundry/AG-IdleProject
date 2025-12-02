@@ -14,38 +14,77 @@ export class Input {
     }
 
     setupListeners() {
-        this.canvas.addEventListener('mousedown', this.onStart.bind(this));
-        this.canvas.addEventListener('mousemove', this.onMove.bind(this));
+        // Listen on window to catch clicks on ribbons/margins
+        window.addEventListener('mousedown', this.onStart.bind(this));
+        window.addEventListener('mousemove', this.onMove.bind(this));
         window.addEventListener('mouseup', this.onEnd.bind(this));
 
-        this.canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault(); // Prevent scrolling
-            this.onStart(e.touches[0]);
+        window.addEventListener('touchstart', (e) => {
+            if (e.target.tagName !== 'BUTTON') {
+                e.preventDefault(); // Prevent scrolling unless hitting a button
+            }
+            this.onStart(e.touches[0], e);
         }, { passive: false });
-        this.canvas.addEventListener('touchmove', (e) => {
+
+        window.addEventListener('touchmove', (e) => {
             e.preventDefault();
             this.onMove(e.touches[0]);
         }, { passive: false });
+
         window.addEventListener('touchend', this.onEnd.bind(this));
     }
 
-    onStart(e) {
-        if (this.ball.isMoving) return;
+    onStart(e, originalEvent) {
+        const debugEl = document.getElementById('debug-console');
+        const log = (msg) => {
+            if (debugEl) {
+                debugEl.innerHTML = `<div>${msg}</div>` + debugEl.innerHTML;
+                if (debugEl.innerHTML.length > 2000) debugEl.innerHTML = debugEl.innerHTML.substring(0, 2000);
+            }
+            console.log(msg);
+        };
+
+        // Ignore clicks on buttons
+        const target = originalEvent ? originalEvent.target : e.target;
+        if (target && (target.tagName === 'BUTTON' || target.closest('button'))) {
+            log("Input: Clicked Button");
+            return;
+        }
+
+        if (this.ball.isMoving) {
+            log("Input ignored: Ball is moving");
+            return;
+        }
 
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
 
-        const x = (e.clientX - rect.left) * scaleX;
-        const y = (e.clientY - rect.top) * scaleY;
+        let x = (e.clientX - rect.left) * scaleX;
+        let y = (e.clientY - rect.top) * scaleY;
+
+        // SUBTRACT VIEWPORT OFFSET (Renderer draws at +30, +60)
+        x -= 30;
+        y -= 60;
+
+        // Clamp to logical world (0-600)
+        x = Math.max(0, Math.min(x, 600));
+        y = Math.max(0, Math.min(y, 600));
 
         // Check if clicking near ball (allow some tolerance)
         const dx = x - this.ball.x;
         const dy = y - this.ball.y;
-        if (dx * dx + dy * dy < 2500) { // 50px radius tolerance
+        const distSq = dx * dx + dy * dy;
+
+        log(`Click: ${e.clientX.toFixed(0)},${e.clientY.toFixed(0)} | World: ${x.toFixed(0)},${y.toFixed(0)} | Ball: ${this.ball.x.toFixed(0)},${this.ball.y.toFixed(0)} | Dist: ${distSq.toFixed(0)}`);
+
+        if (distSq < 1000) { // ~31px radius
             this.isDragging = true;
             this.dragStart = { x: this.ball.x, y: this.ball.y };
             this.dragCurrent = { x: this.ball.x, y: this.ball.y };
+            log("Input: DRAG STARTED!");
+        } else {
+            log("Input: Missed ball");
         }
     }
 
@@ -56,8 +95,16 @@ export class Input {
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
 
-        const x = (e.clientX - rect.left) * scaleX;
-        const y = (e.clientY - rect.top) * scaleY;
+        let x = (e.clientX - rect.left) * scaleX;
+        let y = (e.clientY - rect.top) * scaleY;
+
+        // SUBTRACT VIEWPORT OFFSET
+        x -= 30;
+        y -= 60;
+
+        // Clamp to logical world
+        x = Math.max(0, Math.min(x, 600));
+        y = Math.max(0, Math.min(y, 600));
 
         this.dragCurrent = { x, y };
     }
