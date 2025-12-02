@@ -32,6 +32,7 @@ body {
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
     overflow: visible !important;
     pointer-events: auto !important;
+    box-sizing: border-box;
 }
 
 /* 600×600 logical canvas, perfectly centered so the 540×540 viewport fits exactly inside the container */

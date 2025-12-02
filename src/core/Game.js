@@ -368,6 +368,12 @@ export class Game {
             this.renderer.resetWindEmitters();
             this.audio.setWind([]);
         }
+
+        // Sync Debug Level Select
+        const levelSelect = document.getElementById('level-select');
+        if (levelSelect) {
+            levelSelect.value = this.levelManager.currentLevelIndex;
+        }
     }
 
     nextLevel() {
@@ -480,6 +486,17 @@ export class Game {
                     if (entity.cooldown > 0) entity.cooldown--;
                 }
             }
+
+            // Update Camera
+            // Center on ball, but clamp to world bounds
+            // World: 600x600
+            // Viewport: 540x540
+            // Max Scroll: 600 - 540 = 60
+            const camX = Math.max(0, Math.min(this.ball.x - this.renderer.VIEWPORT_W / 2, this.renderer.LOGICAL_WIDTH - this.renderer.VIEWPORT_W));
+            const camY = Math.max(0, Math.min(this.ball.y - this.renderer.VIEWPORT_H / 2, this.renderer.LOGICAL_HEIGHT - this.renderer.VIEWPORT_H));
+
+            this.renderer.setCamera(camX, camY);
+            this.input.setCamera(camX, camY); // Update input offset
         }
     }
 

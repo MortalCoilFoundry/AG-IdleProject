@@ -10,7 +10,15 @@ export class Input {
         this.maxPower = 150; // Max drag distance
         this.powerScale = 0.15; // Multiplier for velocity
 
+        this.cameraX = 0;
+        this.cameraY = 0;
+
         this.setupListeners();
+    }
+
+    setCamera(x, y) {
+        this.cameraX = x;
+        this.cameraY = y;
     }
 
     setupListeners() {
@@ -52,6 +60,10 @@ export class Input {
         x -= 30;
         y -= 60;
 
+        // ADD CAMERA OFFSET (World is shifted by -cameraX, -cameraY)
+        x += this.cameraX;
+        y += this.cameraY;
+
         // Clamp to logical world (0-600)
         x = Math.max(0, Math.min(x, 600));
         y = Math.max(0, Math.min(y, 600));
@@ -81,6 +93,10 @@ export class Input {
         // SUBTRACT VIEWPORT OFFSET
         x -= 30;
         y -= 60;
+
+        // ADD CAMERA OFFSET
+        x += this.cameraX;
+        y += this.cameraY;
 
         // Clamp to logical world
         x = Math.max(0, Math.min(x, 600));

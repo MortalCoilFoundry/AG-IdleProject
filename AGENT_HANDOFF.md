@@ -1,28 +1,29 @@
 # Agent Handoff: Retro Putt
 
 ## Current State
-**Stable & Functional**. Level 4 Wind mechanics fully restored and polished. Debug tools active.
+**Pixel-Perfect & Responsive**. The game now features a robust 540x540 letterboxed viewport within a 600x600 logical world, centered perfectly on all devices with accurate input.
 
-## Recent Work (Session Summary)
-1.  **Wind Visualization Restored**:
-    *   Re-implemented `LevelManager.getWindZones`.
-    *   Added `Renderer` particle system (Speed: 100, Swirl: 20, Size: 3px).
-    *   Added `Audio` feedback (Sine wave, low gain).
-2.  **Debug Features**:
-    *   Added Level Selector (`<select>`) to `index.html`.
-    *   Hotkeys: `w` (Toggle Arrows), `d` (Toggle Zones).
-3.  **Regression Fixes**:
-    *   **CRITICAL**: Restored missing methods in `Renderer.js` (`resetWindEmitters`, `endFrame`), `Audio.js` (`startWind`, `stopWind`), and `Input.js` (`getAimPreview`).
-    *   **Aim Preview**: Fixed trajectory simulation to match physics (removed incorrect 0.05 scaling).
-    *   **HTML**: Fixed corrupted `index.html` (missing canvas/body).
+## Critical Architecture (DO NOT BREAK)
+### 1. Rendering (Letterboxing)
+- **Logical Buffer**: 600x600 (`Renderer.LOGICAL_WIDTH`).
+- **Viewport**: 540x540 (`Renderer.VIEWPORT_W`), offset by (30, 60).
+- **Clipping**: `Renderer.startScene()` clips to the viewport and translates the origin. **Always use this.**
+- **CSS**: `#game-container` is the "Safe Green Zone" sized to `min(100vw, 100vh - 120px)`. `#game-canvas` is scaled (111.11%) and offset inside it.
 
-## Known Pitfalls & Blockers
-*   **Tooling/Corruption**: `replace_file_content` is prone to truncating files or creating syntax errors (e.g., missing closing braces). **Verify file integrity after every major edit.**
-*   **CSS Pointer Events**: The `#debug-controls` div must be outside `#ui-layer` or have explicit `pointer-events: auto` because `#ui-layer` has `pointer-events: none`.
-*   **Missing Methods**: Several core methods vanished between sessions. Assume nothing exists until verified with `view_file`.
-*   **Local Server**: Must run via `python -m http.server` (or similar) due to ES Module CORS policies.
+### 2. Input System (The "Holy Grail" Fix)
+- **Global Listeners**: `Input.js` listens on `window` (not canvas) to capture clicks on ribbons/margins.
+- **Coordinate Mapping**:
+  1.  Scale: `canvas.width / rect.width` (Display -> Logical).
+  2.  **Offset**: Subtract `(30, 60)` to match the rendered viewport. **CRITICAL**.
+- **Robustness**: Clamped to 0-600. Ignores UI buttons.
+
+## Pitfalls & Lessons Learned
+-   **Input Re-instantiation**: **NEVER** put `new Input()` in the game loop. It resets drag state every frame. Initialize once in `init()`.
+-   **Viewport Offset**: If input feels "off" or "misses" the ball, check if the (30, 60) offset is being subtracted. The visual ball is drawn at `(x+30, y+60)`, so input must account for this.
+-   **CSS Fragility**: `replace_file_content` often fails on `style.css` due to formatting. **Overwrite the file** if extensive changes are needed.
+-   **Dead Zones**: Canvas event listeners miss clicks on the "ribbons" (which visually border the game). Use `window` listeners to fix this.
 
 ## Next Steps
-*   **Verification**: Playtest all levels to ensure no other physics regressions.
-*   **Polish**: Further tune wind audio (maybe add noise buffer instead of oscillator).
-*   **Expansion**: Add Level 5 or new hazards.
+-   **Gameplay**: Add new levels (currently only 4).
+-   **Polish**: Add "hole-in" animations or transition effects.
+-   **Audio**: Tune wind noise (currently basic sine wave).

@@ -61,7 +61,7 @@ export class LevelManager {
             {
                 par: 4,
                 start: { x: 300, y: 550 },
-                hole: { x: 300, y: 50, radius: 15 },
+                hole: { x: 300, y: 100, radius: 15 },
                 walls: [
                     { x: 250, y: 250, width: 100, height: 100 }
                 ],
@@ -88,7 +88,7 @@ export class LevelManager {
             {
                 par: 4,
                 start: { x: 300, y: 550 },
-                hole: { x: 300, y: 50, radius: 15 },
+                hole: { x: 300, y: 100, radius: 15 },
                 walls: [],
                 hazards: [],
                 entities: [
@@ -100,7 +100,7 @@ export class LevelManager {
             {
                 par: 5,
                 start: { x: 300, y: 550 },
-                hole: { x: 300, y: 50, radius: 15 },
+                hole: { x: 300, y: 100, radius: 15 },
                 walls: [],
                 hazards: [],
                 entities: [
@@ -113,7 +113,7 @@ export class LevelManager {
             {
                 par: 4,
                 start: { x: 300, y: 550 },
-                hole: { x: 300, y: 50, radius: 15 },
+                hole: { x: 300, y: 100, radius: 15 },
                 walls: [
                     { x: 200, y: 0, width: 20, height: 600 },
                     { x: 380, y: 0, width: 20, height: 600 }
@@ -157,7 +157,7 @@ export class LevelManager {
             {
                 par: 5,
                 start: { x: 300, y: 550 },
-                hole: { x: 300, y: 50, radius: 15 },
+                hole: { x: 300, y: 100, radius: 15 },
                 walls: [],
                 hazards: [
                     { x: 100, y: 300, width: 100, height: 100 } // Sand with switch
@@ -171,7 +171,7 @@ export class LevelManager {
             {
                 par: 5,
                 start: { x: 300, y: 550 },
-                hole: { x: 300, y: 50, radius: 15 },
+                hole: { x: 300, y: 100, radius: 15 },
                 walls: [
                     { x: 290, y: 200, width: 20, height: 200 } // Divider
                 ],
@@ -187,7 +187,7 @@ export class LevelManager {
             {
                 par: 4,
                 start: { x: 300, y: 550 },
-                hole: { x: 300, y: 50, radius: 15 },
+                hole: { x: 300, y: 100, radius: 15 },
                 walls: [],
                 hazards: [],
                 entities: [
@@ -199,7 +199,7 @@ export class LevelManager {
             {
                 par: 6,
                 start: { x: 300, y: 550 },
-                hole: { x: 300, y: 50, radius: 15 },
+                hole: { x: 300, y: 100, radius: 15 },
                 walls: [],
                 hazards: [],
                 entities: [
@@ -214,7 +214,7 @@ export class LevelManager {
             {
                 par: 5,
                 start: { x: 300, y: 550 },
-                hole: { x: 300, y: 50, radius: 15 },
+                hole: { x: 300, y: 100, radius: 15 },
                 walls: [
                     { x: 200, y: 0, width: 20, height: 600 },
                     { x: 380, y: 0, width: 20, height: 600 }
@@ -229,7 +229,7 @@ export class LevelManager {
             {
                 par: 7,
                 start: { x: 300, y: 550 },
-                hole: { x: 300, y: 50, radius: 15 },
+                hole: { x: 300, y: 100, radius: 15 },
                 walls: [],
                 hazards: [
                     { x: 100, y: 200, width: 400, height: 200 }

@@ -25,6 +25,10 @@ export class Renderer {
         this.shakeY = 0;
         this.shakeDuration = 0;
 
+        // Camera System
+        this.cameraX = 0;
+        this.cameraY = 0;
+
         // Trail System
         this.trailParticles = [];
         this.maxTrailParticles = 80; // Increased to 80
@@ -67,6 +71,11 @@ export class Renderer {
         this.ctx.clearRect(0, 0, this.LOGICAL_WIDTH, this.LOGICAL_HEIGHT);
     }
 
+    setCamera(x, y) {
+        this.cameraX = x;
+        this.cameraY = y;
+    }
+
     startScene() {
         this.ctx.save();
 
@@ -77,10 +86,14 @@ export class Renderer {
 
         // 2. Apply Camera/Shake
         // Shake moves the world inside the viewport
-        this.ctx.translate(this.VIEWPORT_X + this.shakeX, this.VIEWPORT_Y + this.shakeY);
+        // Camera moves the world in the opposite direction
+        // Viewport Offset moves the origin to the viewport start
+        this.ctx.translate(this.VIEWPORT_X + this.shakeX - this.cameraX, this.VIEWPORT_Y + this.shakeY - this.cameraY);
 
         // 3. Draw Game Background (clipped to viewport)
+        // We need to draw the background relative to the camera to cover the whole world
         this.ctx.fillStyle = this.colors.light;
+        this.ctx.fillRect(this.cameraX, this.cameraY, this.VIEWPORT_W, this.VIEWPORT_H); // Draw bg only for viewport? No, draw full world.
         this.ctx.fillRect(0, 0, this.LOGICAL_WIDTH, this.LOGICAL_HEIGHT);
     }
 
