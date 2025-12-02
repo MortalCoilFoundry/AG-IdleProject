@@ -59,6 +59,18 @@ The game uses a global `EventBus` to manage state transitions:
   - Responsive container (`#game-container`) sized to `min(100vw, 100vh - 120px)`.
   - Fixed top/bottom ribbons (60px height) cover the "dead zones" of the logical world.
 
+### Camera System
+- **Concept**: Clamped Follow.
+- **Problem**: The logical world is 600x600, but the visible viewport is only 540x540.
+- **Solution**: A camera tracks the ball to keep it centered within the viewport, allowing the player to explore the full level.
+- **Constraints**:
+  - **Clamping**: The camera is clamped to the world bounds (0-600) so the player never sees "outside" the level.
+  - **Pixel-Perfect**: No scaling is used. The view is a 1:1 window into the larger world.
+- **Implementation**:
+  - `Renderer.js`: Applies a translation `(-cameraX, -cameraY)` before drawing the world.
+  - `Game.js`: Updates `cameraX/Y` every frame based on ball position.
+  - `Input.js`: Adds `cameraX/Y` to mouse coordinates to map screen clicks to the scrolling world.
+
 ### Input System
 - **Global Handling**: Listeners attached to `window` to capture input across the entire screen, including ribbons.
 - **Coordinate Mapping**:

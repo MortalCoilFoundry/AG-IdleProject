@@ -1,29 +1,25 @@
 # Agent Handoff: Retro Putt
 
 ## Current State
-**Pixel-Perfect & Responsive**. The game now features a robust 540x540 letterboxed viewport within a 600x600 logical world, centered perfectly on all devices with accurate input.
+**Camera-Enabled Pixel Perfection**. The game now supports a **600x600 logical world** viewed through a **540x540 viewport** via a clamped camera system. This resolves previous visibility issues where content > 540px was inaccessible.
 
 ## Critical Architecture (DO NOT BREAK)
-### 1. Rendering (Letterboxing)
-- **Logical Buffer**: 600x600 (`Renderer.LOGICAL_WIDTH`).
-- **Viewport**: 540x540 (`Renderer.VIEWPORT_W`), offset by (30, 60).
-- **Clipping**: `Renderer.startScene()` clips to the viewport and translates the origin. **Always use this.**
-- **CSS**: `#game-container` is the "Safe Green Zone" sized to `min(100vw, 100vh - 120px)`. `#game-canvas` is scaled (111.11%) and offset inside it.
+### 1. Rendering (Camera & Viewport)
+-   **Viewport**: Fixed at 540x540, offset by (30, 60).
+-   **Camera**: Tracks the ball, clamped to world bounds (0-600).
+-   **Translation**: `Renderer.startScene()` applies `translate(VIEWPORT_X - cameraX, VIEWPORT_Y - cameraY)`. **Always maintain this order.**
+-   **CSS**: `#game-container` uses `box-sizing: border-box` to ensure the 4px border doesn't cause overflow/cutoff.
 
-### 2. Input System (The "Holy Grail" Fix)
-- **Global Listeners**: `Input.js` listens on `window` (not canvas) to capture clicks on ribbons/margins.
-- **Coordinate Mapping**:
-  1.  Scale: `canvas.width / rect.width` (Display -> Logical).
-  2.  **Offset**: Subtract `(30, 60)` to match the rendered viewport. **CRITICAL**.
-- **Robustness**: Clamped to 0-600. Ignores UI buttons.
+### 2. Input System (World-Aware)
+-   **Mapping**: Input coordinates must now account for **both** the viewport offset (-30, -60) **AND** the camera offset (+cameraX, +cameraY).
+-   **Logic**: `Input.js` maps screen clicks -> logical world coordinates.
 
-## Pitfalls & Lessons Learned
--   **Input Re-instantiation**: **NEVER** put `new Input()` in the game loop. It resets drag state every frame. Initialize once in `init()`.
--   **Viewport Offset**: If input feels "off" or "misses" the ball, check if the (30, 60) offset is being subtracted. The visual ball is drawn at `(x+30, y+60)`, so input must account for this.
--   **CSS Fragility**: `replace_file_content` often fails on `style.css` due to formatting. **Overwrite the file** if extensive changes are needed.
--   **Dead Zones**: Canvas event listeners miss clicks on the "ribbons" (which visually border the game). Use `window` listeners to fix this.
+## Troubleshooting & Lessons Learned
+-   **The "Invisible Level" Trap**: The previous agent set up a 600x600 world in a 540x540 viewport *without* a camera, making the bottom 60px (where Level 6 starts) invisible. **Lesson**: Always verify that logical bounds fit within the visible viewport, or implement scrolling immediately.
+-   **CSS Box Model**: The game container was being cut off by 4px because `box-sizing: border-box` was missing. **Lesson**: When using `min(100vw...)`, always account for borders/padding.
+-   **Input Sync**: When adding a camera, you **MUST** update the Input system. If you scroll the world but not the input, clicks will drift.
 
 ## Next Steps
--   **Gameplay**: Add new levels (currently only 4).
--   **Polish**: Add "hole-in" animations or transition effects.
--   **Audio**: Tune wind noise (currently basic sine wave).
+-   **Level Design**: You now have the full 600x600 space (and potentially more if you expand `LOGICAL_WIDTH/HEIGHT`).
+-   **Polish**: The camera snaps instantly. Consider adding **smooth lerping** (e.g., `camX += (targetX - camX) * 0.1`) for a better feel.
+-   **Debug**: The Level Select is currently enabled in `index.html`. Hide it for production.
