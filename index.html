@@ -38,32 +38,14 @@
         </div>
 
         <!-- Modal Container -->
-        <div id="modal-overlay">
-            <div id="modal-container"></div>
-        </div>
-
-        <!-- Keep debug controls if needed -->
-        <div id="debug-controls">…</div>
-    </div>
-
-    <div id="debug-console"
-        style="position: fixed; top: 60px; left: 0; width: 300px; height: 400px; background: rgba(0,0,0,0.8); color: lime; font-family: monospace; font-size: 10px; overflow-y: auto; z-index: 9999; pointer-events: none; padding: 5px;">
-        Debug Log...
-    </div>
-    <script>
-        window.onerror = function (msg, url, line, col, error) {
-            const log = document.getElementById('error-log');
-            log.style.display = 'block';
-            log.innerHTML += `<div>Error: ${msg} <br> at ${url}:${line}:${col}</div>`;
-            console.error("Global Error:", msg, url, line, col, error);
         };
         window.addEventListener('unhandledrejection', function (event) {
-            const log = document.getElementById('error-log');
-            log.style.display = 'block';
-            log.innerHTML += `<div>Promise Rejection: ${event.reason}</div>`;
+        const log = document.getElementById('error-log');
+        log.style.display = 'block';
+        log.innerHTML += `<div>Promise Rejection: ${event.reason}</div>`;
         });
-    </script>
-    <script type="module" src="src/main.js"></script>
+        </script>
+        <script type="module" src="src/main.js"></script>
 </body>
 
 </html>

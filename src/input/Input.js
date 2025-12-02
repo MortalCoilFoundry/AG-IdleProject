@@ -35,26 +35,11 @@ export class Input {
     }
 
     onStart(e, originalEvent) {
-        const debugEl = document.getElementById('debug-console');
-        const log = (msg) => {
-            if (debugEl) {
-                debugEl.innerHTML = `<div>${msg}</div>` + debugEl.innerHTML;
-                if (debugEl.innerHTML.length > 2000) debugEl.innerHTML = debugEl.innerHTML.substring(0, 2000);
-            }
-            console.log(msg);
-        };
-
         // Ignore clicks on buttons
         const target = originalEvent ? originalEvent.target : e.target;
-        if (target && (target.tagName === 'BUTTON' || target.closest('button'))) {
-            log("Input: Clicked Button");
-            return;
-        }
+        if (target && (target.tagName === 'BUTTON' || target.closest('button'))) return;
 
-        if (this.ball.isMoving) {
-            log("Input ignored: Ball is moving");
-            return;
-        }
+        if (this.ball.isMoving) return;
 
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
@@ -76,15 +61,10 @@ export class Input {
         const dy = y - this.ball.y;
         const distSq = dx * dx + dy * dy;
 
-        log(`Click: ${e.clientX.toFixed(0)},${e.clientY.toFixed(0)} | World: ${x.toFixed(0)},${y.toFixed(0)} | Ball: ${this.ball.x.toFixed(0)},${this.ball.y.toFixed(0)} | Dist: ${distSq.toFixed(0)}`);
-
         if (distSq < 1000) { // ~31px radius
             this.isDragging = true;
             this.dragStart = { x: this.ball.x, y: this.ball.y };
             this.dragCurrent = { x: this.ball.x, y: this.ball.y };
-            log("Input: DRAG STARTED!");
-        } else {
-            log("Input: Missed ball");
         }
     }
 
