@@ -80,14 +80,14 @@ body {
 }
 
 /* Scanline overlay - covers the container */
-#game-container::after {
+#scanlines {
     content: " ";
     display: block;
-    position: absolute;
+    position: fixed;
     inset: 0;
     background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
     background-size: 100% 4px;
-    z-index: 10;
+    z-index: 9999;
     pointer-events: none;
 }
 
