@@ -47,3 +47,55 @@ The game uses a global `EventBus` to manage state transitions:
   - **Screen Shake**: Camera offset applied on wall impacts.
 - **Audio**:
   - Oscillator-based chiptune SFX (Square/Sawtooth/Sine waves).
+
+## 6. User Interface & Display
+### Pixel-Perfect Letterboxing
+- **Logical Resolution**: 600x600 buffer.
+- **Viewport**: 540x540 visible gameplay area, centered within the logical world (Offset: 30, 60).
+- **Rendering**:
+  - `Renderer.js` clips drawing to the viewport and translates the origin.
+  - CSS enforces `image-rendering: pixelated` for crisp 1:1 pixels.
+- **Layout**:
+  - Responsive container (`#game-container`) sized to `min(100vw, 100vh - 120px)`.
+  - Fixed top/bottom ribbons (60px height) cover the "dead zones" of the logical world.
+
+### Input System
+- **Global Handling**: Listeners attached to `window` to capture input across the entire screen, including ribbons.
+- **Coordinate Mapping**:
+  - Input coordinates are scaled from display size to logical size (600x600).
+  - **Offset Correction**: Coordinates are shifted by (-30, -60) to align with the rendered viewport.
+- **Robustness**:
+  - Clamped to logical bounds (0-600).
+  - Ignores clicks on UI buttons.
+  - `touch-action: none` prevents scrolling on mobile.
+
+#### Feature: Mobile-First Retro Ribbon UI + Modal System
+**Status**: Implemented (core) / Ready for Expansion  
+**Core Events Added**:
+- `UI_RIBBON_TAP` → { section: 'menu' | 'courses' | 'colors' | 'settings' | 'editor' }
+- `UI_MODAL_OPEN` → { id: string, data?: any }
+- `UI_MODAL_CLOSE` → { id: string }
+- `UI_SHOW_MAIN_MENU` → (opens the main pause menu)
+**Systems Touched**: Renderer, Input, new UIManager  
+**Feature Flag**: `FEATURE_RIBBON_UI`
+**Estimated Scope**: Medium
+**Notes / Ideas**:
+- All UI lives in DOM overlay (performant, accessible, easy to style with CSS pixels).
+- Gameplay canvas is shrunk to 540×540 safe zone (30px padding on all sides).
+- Ribbon uses 4-color GBR palette + dithered shadows.
+- Modals are full-screen, slide up from bottom, swipe-down or [X] to close.
+- Every modal is a self-contained .html snippet + .js controller → infinitely extendable.
+
++--------------------------------------------------+
+|   [≡]  Retro Putt         ★ 3   PAR 3   ○ 2     |  ← Top ribbon (always visible, touchable)
++--------------------------------------------------+
+|                                                  |
+|                                                  |
+|               [gameplay area 540×540]            |
+|                                                  |
+|                                                  |
++--------------------------------------------------+
+|   <  Courses  |  Balls  |  Settings  |  Editor >|  ← Bottom ribbon (swipeable/carousel feel)
++--------------------------------------------------+
+
+When you tap "Courses" → full-screen retro modal slides in from bottom with big X or swipe-down to close.
