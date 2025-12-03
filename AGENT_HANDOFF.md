@@ -23,3 +23,15 @@
 -   **Level Design**: You now have the full 600x600 space (and potentially more if you expand `LOGICAL_WIDTH/HEIGHT`).
 -   **Polish**: The camera snaps instantly. Consider adding **smooth lerping** (e.g., `camX += (targetX - camX) * 0.1`) for a better feel.
 -   **Debug**: The Level Select is currently enabled in `index.html`. Hide it for production.
+
+## Recent Features (Audio & UI)
+### Audio System Refactor
+-   **Buses**: 5-channel architecture (`master`, `music`, `ambience`, `ui`, `sfx`).
+-   **Persistence**: Settings saved to `localStorage` key `retro-putt-settings`.
+-   **Routing**: All new sounds **MUST** be routed to the appropriate bus (e.g., `this.sfxGain`) instead of `destination`.
+
+### UI Framework
+-   **Settings Modal**: Implemented in `src/ui/SettingsModal.js`.
+-   **Retro Meter**: Custom volume control UI using blocks.
+-   **Integration**: Wired to `#bottom-ribbon`.
+-   **DOM Structure**: Requires `#modal-overlay` and `#modal-container` in `index.html`.

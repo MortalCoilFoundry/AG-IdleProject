@@ -30,6 +30,9 @@ export class AudioController {
 
         // Initialize Buses
         this.initBuses();
+
+        this.musicSource = null;
+        this.musicBuffer = null;
     }
 
     initBuses() {
@@ -82,6 +85,42 @@ export class AudioController {
             } catch (e) {
                 console.warn('Failed to save audio settings', e);
             }
+        }
+    }
+
+    async loadMusic(url) {
+        try {
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            this.musicBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            console.log(`Music loaded: ${url}`);
+        } catch (e) {
+            console.error(`Failed to load music: ${url}`, e);
+        }
+    }
+
+    playMusic() {
+        if (!this.musicBuffer) return;
+
+        // Cleanup existing source
+        if (this.musicSource) {
+            this.musicSource.stop();
+            this.musicSource.disconnect();
+            this.musicSource = null;
+        }
+
+        this.musicSource = this.ctx.createBufferSource();
+        this.musicSource.buffer = this.musicBuffer;
+        this.musicSource.loop = true;
+        this.musicSource.connect(this.musicGain);
+        this.musicSource.start(0);
+    }
+
+    stopMusic() {
+        if (this.musicSource) {
+            this.musicSource.stop();
+            this.musicSource.disconnect();
+            this.musicSource = null;
         }
     }
 

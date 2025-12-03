@@ -6,6 +6,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const game = new Game();
     window.game = game; // For debugging
 
+    // Preload Music
+    if (game.audio) {
+        game.audio.loadMusic('assets/music/track1.mp3');
+    }
+
     // Initialize UI Components
     const settingsModal = new SettingsModal(game.audio);
 
@@ -23,6 +28,7 @@ window.addEventListener('DOMContentLoaded', () => {
             // This uses the explicit user gesture to unlock the Web Audio API
             if (game.audio) {
                 game.audio.resume();
+                game.audio.playMusic();
             }
 
             // B. Hide the Overlay
