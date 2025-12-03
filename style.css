@@ -130,6 +130,138 @@ body {
    They sit on top of everything (z-index 20).
    They cover the "Dead Zones" of the canvas if they overflow the container.
 */
+:root {
+    --color-darkest: #0f380f;
+    --color-dark: #306230;
+    --color-light: #8bac0f;
+    --color-lightest: #9bbc0f;
+}
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--color-darkest);
+}
+
+body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Press Start 2P', cursive;
+    color: var(--color-lightest);
+}
+
+/* 
+   GAME CONTAINER = THE SAFE GREEN ZONE (540x540 logical)
+   This container is sized to fit perfectly between the ribbons.
+   It represents the "Green Area" that must be fully visible and clickable.
+*/
+#game-container {
+    position: relative;
+    /* Fit within width, and within height minus ribbons (120px) */
+    width: min(100vw, calc(100vh - 120px));
+    height: min(100vw, calc(100vh - 120px));
+    /* Ensure it stays square */
+    aspect-ratio: 1 / 1;
+
+    /* Centered visually (flex body handles this, but margin auto is safe) */
+    margin: auto;
+
+    /* Border/Shadow for retro feel */
+    border: 4px solid var(--color-lightest);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+
+    /* Ensure canvas doesn't overflow this container visually? 
+       NO, we want the dead zones to overflow if needed, but be covered by ribbons.
+       But ribbons are fixed to body.
+       So we allow overflow, but z-index handles hiding.
+    */
+    overflow: visible;
+}
+
+/* 
+   GAME CANVAS = THE FULL 600x600 LOGICAL BUFFER
+   It is larger than the container (111.11%).
+   It is positioned so the Green Area (30,60 to 570,600) aligns with the Container.
+*/
+#game-canvas {
+    display: block;
+    position: absolute;
+
+    /* Scale: 600 / 540 = 111.111% */
+    width: 111.1111%;
+    height: 111.1111%;
+
+    /* Offset: 
+       Left: -30 / 540 = -5.5555%
+       Top: -60 / 540 = -11.1111%
+    */
+    left: -5.5555%;
+    top: -11.1111%;
+
+    background-color: var(--color-light);
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    touch-action: none;
+
+    /* Ensure it is behind ribbons */
+    z-index: 1;
+}
+
+/* Global Scanline Overlay & CRT Effects */
+#scanlines {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+
+    /* 1. Static Scanlines (The Mesh) */
+    background: linear-gradient(to bottom,
+            rgba(255, 255, 255, 0),
+            rgba(255, 255, 255, 0) 50%,
+            rgba(0, 0, 0, 0.2) 50%,
+            rgba(0, 0, 0, 0.2));
+    background-size: 100% 4px;
+
+    /* 2. Vignette (The Tube Shape) */
+    box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.6);
+}
+
+/* 3. Rolling Scanline (The Beam) */
+#scanlines::before {
+    content: " ";
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 20%;
+    background: linear-gradient(to bottom,
+            rgba(155, 188, 15, 0) 0%,
+            rgba(155, 188, 15, 0.1) 50%,
+            rgba(155, 188, 15, 0) 100%);
+    animation: scanline-roll 8s linear infinite;
+    pointer-events: none;
+    z-index: 1;
+}
+
+@keyframes scanline-roll {
+    0% {
+        top: -20%;
+    }
+
+    100% {
+        top: 120%;
+    }
+}
+
+/* 
+   RIBBONS = FIXED UI LAYERS
+   They sit on top of everything (z-index 20).
+   They cover the "Dead Zones" of the canvas if they overflow the container.
+*/
 #top-ribbon,
 #bottom-ribbon {
     position: fixed;
@@ -143,6 +275,7 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 0 20px;
+    gap: 10px;
     box-sizing: border-box;
     z-index: 20;
     /* Above canvas */
@@ -174,6 +307,9 @@ body {
     min-height: 56px;
     box-shadow: 4px 4px 0 var(--color-darkest);
     text-shadow: 3px 3px 0 var(--color-dark);
+    /* Flex safety */
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 #top-ribbon button:active,
@@ -246,4 +382,46 @@ body {
 
 #ui-layer {
     display: none;
+}
+
+/* =========================================
+   RESPONSIVE LAYOUT (Mobile / Small Screens)
+   ========================================= */
+@media (max-width: 600px) {
+
+    /* Shrink Ribbons */
+    #top-ribbon,
+    #bottom-ribbon {
+        padding: 0 5px;
+        gap: 2px;
+    }
+
+    /* Top Ribbon: Scale down text */
+    #top-ribbon #title {
+        font-size: 16px;
+        letter-spacing: 1px;
+    }
+
+    #top-ribbon #stats span {
+        margin-left: 8px;
+        font-size: 10px;
+    }
+
+    /* Bottom Ribbon: Fluid Buttons */
+    #bottom-ribbon button {
+        flex: 1 1 0;
+        /* Share space equally */
+        min-width: 0;
+        /* Allow shrinking below content size */
+        padding: 0;
+        /* Remove horizontal padding, center text */
+        font-size: 10px;
+        /* Smaller text */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        /* "Settings" -> "Set..." */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
 }
