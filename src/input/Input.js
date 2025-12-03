@@ -1,9 +1,10 @@
 import { eventBus } from '../core/EventBus.js';
 
 export class Input {
-    constructor(canvas, ball) {
+    constructor(canvas, ball, audioController) {
         this.canvas = canvas;
         this.ball = ball;
+        this.audioController = audioController;
         this.isDragging = false;
         this.dragStart = { x: 0, y: 0 };
         this.dragCurrent = { x: 0, y: 0 };
@@ -46,6 +47,10 @@ export class Input {
         // Ignore clicks on buttons
         const target = originalEvent ? originalEvent.target : e.target;
         if (target && (target.tagName === 'BUTTON' || target.closest('button'))) return;
+
+        if (this.audioController) {
+            this.audioController.resume();
+        }
 
         if (this.ball.isMoving) return;
 

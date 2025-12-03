@@ -57,8 +57,12 @@ export class AudioController {
             this.ctx.resume();
         }
         // Start sources on first user interaction if initialized
-        if (this.windInitialized && !this.sourcesStarted) {
-            this.startSources();
+        if (!this.sourcesStarted) {
+            // If the level already called setWind(), windInitialized is true.
+            // So we start the sources now that we have a user gesture.
+            if (this.windInitialized) {
+                this.startSources();
+            }
         }
     }
 
@@ -209,10 +213,10 @@ export class AudioController {
         if (this.currentWindStrength <= 0) {
             // Enable breathing + higher base
             this.noiseGain.gain.cancelScheduledValues(now);
-            this.noiseGain.gain.setTargetAtTime(0.25, now, 4.0);  // Slightly higher base
+            this.noiseGain.gain.setTargetAtTime(0.15, now, 4.0);  // Slightly higher base
 
             this.breathingGain.gain.cancelScheduledValues(now);
-            this.breathingGain.gain.setTargetAtTime(0.4, now, 4.0);  // Stronger swell: 0.015 → 0.041
+            this.breathingGain.gain.setTargetAtTime(0.3, now, 6.0);  // Stronger swell: 0.015 → 0.041
 
             // Force filters to stay calm
             this.ensureCalmFilters();
@@ -231,10 +235,10 @@ export class AudioController {
 
         // Pitch ramp (always safe)
         this.windOsc1.frequency.cancelScheduledValues(now);
-        this.windOsc1.frequency.setTargetAtTime(targetFreq, now, 2.0);
+        this.windOsc1.frequency.setTargetAtTime(targetFreq + 1, now, 2.0);
 
         this.windOsc2.frequency.cancelScheduledValues(now);
-        this.windOsc2.frequency.setTargetAtTime(targetFreq + 4, now, 2.0);
+        this.windOsc2.frequency.setTargetAtTime(targetFreq + 2, now, 2.0);
     }
 
     update(dt) {
