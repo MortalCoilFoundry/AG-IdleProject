@@ -98,9 +98,9 @@ export class Input {
         x += this.cameraX;
         y += this.cameraY;
 
-        // Clamp to logical world
-        x = Math.max(0, Math.min(x, 600));
-        y = Math.max(0, Math.min(y, 600));
+        // Clamp to logical world 12/03/2025 REMOVED BY USER
+        // x = Math.max(0, Math.min(x, 600));
+        // y = Math.max(0, Math.min(y, 600));
 
         this.dragCurrent = { x, y };
     }
