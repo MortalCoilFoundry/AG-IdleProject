@@ -27,6 +27,14 @@
         <!-- Gameplay Canvas (now centered with padding) -->
         <canvas id="game-canvas" width="540" height="540"></canvas>
 
+        <!-- Start Screen Overlay -->
+        <div id="start-screen">
+            <div class="content">
+                <h1>RETRO PUTT</h1>
+                <p class="blink">TAP TO START</p>
+            </div>
+        </div>
+
         <!-- Bottom Ribbon -->
         <div id="bottom-ribbon">
             <button data-section="courses">&lt;</button>
@@ -44,16 +52,22 @@
         </select>
 
         <!-- Modal Container -->
-        };
-        window.addEventListener('unhandledrejection', function (event) {
-        const log = document.getElementById('error-log');
-        log.style.display = 'block';
-        log.innerHTML += `<div>Promise Rejection: ${event.reason}</div>`;
-        });
+
+        <!-- Error Log -->
+        <div id="error-log"
+            style="display:none; color: red; background: black; position: fixed; bottom: 0; left: 0; width: 100%; z-index: 9999;">
+        </div>
+        <script>
+            window.addEventListener('unhandledrejection', function (event) {
+                const log = document.getElementById('error-log');
+                log.style.display = 'block';
+                log.innerHTML += `<div>Promise Rejection: ${event.reason}</div>`;
+            });
         </script>
         <script type="module" src="src/main.js"></script>
         <!-- Global Scanlines -->
         <div id="scanlines"></div>
+    </div>
 </body>
 
 </html>
