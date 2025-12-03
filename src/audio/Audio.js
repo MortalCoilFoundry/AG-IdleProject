@@ -112,7 +112,17 @@ export class AudioController {
         this.musicSource = this.ctx.createBufferSource();
         this.musicSource.buffer = this.musicBuffer;
         this.musicSource.loop = true;
-        this.musicSource.connect(this.musicGain);
+        // --- NEW: The -12dB Trim Node ---
+        // Create a gain node specifically to quiet this loud track
+        const trimNode = this.ctx.createGain();
+
+        // Math: 10^(-12/20) ≈ 0.2511
+        trimNode.gain.value = 0.25;
+
+        // Connect the chain: Source -> Trim -> Music Bus
+        this.musicSource.connect(trimNode);
+        trimNode.connect(this.musicGain);
+
         this.musicSource.start(0);
     }
 
