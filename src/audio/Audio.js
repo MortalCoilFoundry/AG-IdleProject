@@ -9,6 +9,100 @@ export class AudioController {
         this.nextSilenceTime = 10;
         this.isSilent = false;
         this.currentWindStrength = 0;
+
+        // Load Settings
+        this.settings = {
+            master: 1.0,
+            music: 1.0,
+            ambience: 1.0,
+            ui: 1.0,
+            sfx: 1.0
+        };
+
+        try {
+            const saved = localStorage.getItem('retro-putt-settings');
+            if (saved) {
+                this.settings = { ...this.settings, ...JSON.parse(saved) };
+            }
+        } catch (e) {
+            console.warn('Failed to load audio settings', e);
+        }
+
+        // Initialize Buses
+        this.initBuses();
+    }
+
+    initBuses() {
+        // Create Nodes
+        this.masterGain = this.ctx.createGain();
+        this.musicGain = this.ctx.createGain();
+        this.ambienceGain = this.ctx.createGain();
+        this.uiGain = this.ctx.createGain();
+        this.sfxGain = this.ctx.createGain();
+
+        // Routing: Channel -> Master -> Destination
+        this.musicGain.connect(this.masterGain);
+        this.ambienceGain.connect(this.masterGain);
+        this.uiGain.connect(this.masterGain);
+        this.sfxGain.connect(this.masterGain);
+        this.masterGain.connect(this.ctx.destination);
+
+        // Apply Initial Volumes
+        this.updateVolumes();
+    }
+
+    updateVolumes() {
+        const now = this.ctx.currentTime;
+        this.masterGain.gain.setValueAtTime(this.settings.master, now);
+        this.musicGain.gain.setValueAtTime(this.settings.music, now);
+        this.ambienceGain.gain.setValueAtTime(this.settings.ambience, now);
+        this.uiGain.gain.setValueAtTime(this.settings.ui, now);
+        this.sfxGain.gain.setValueAtTime(this.settings.sfx, now);
+    }
+
+    setVolume(channel, value) {
+        if (this.settings.hasOwnProperty(channel)) {
+            this.settings[channel] = Math.max(0, Math.min(1, value));
+
+            // Update Audio Node
+            const now = this.ctx.currentTime;
+            const targetGain = this.settings[channel];
+
+            switch (channel) {
+                case 'master': this.masterGain.gain.setTargetAtTime(targetGain, now, 0.1); break;
+                case 'music': this.musicGain.gain.setTargetAtTime(targetGain, now, 0.1); break;
+                case 'ambience': this.ambienceGain.gain.setTargetAtTime(targetGain, now, 0.1); break;
+                case 'ui': this.uiGain.gain.setTargetAtTime(targetGain, now, 0.1); break;
+                case 'sfx': this.sfxGain.gain.setTargetAtTime(targetGain, now, 0.1); break;
+            }
+
+            // Save Persistence
+            try {
+                localStorage.setItem('retro-putt-settings', JSON.stringify(this.settings));
+            } catch (e) {
+                console.warn('Failed to save audio settings', e);
+            }
+        }
+    }
+
+    playUiBlip() {
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.05);
+
+        gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+
+        osc.connect(gain);
+        gain.connect(this.uiGain); // Route to UI Bus
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.1);
     }
 
     playTone(freq, type, duration) {
@@ -25,7 +119,7 @@ export class AudioController {
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
 
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(this.sfxGain); // Route to SFX Bus
 
         osc.start();
         osc.stop(this.ctx.currentTime + duration);
@@ -71,23 +165,21 @@ export class AudioController {
         this.windInitialized = true;
 
         // Node Graph: 
-        // [Osc1, Osc2] -> [TriangleGain] -> [MasterGain]
-        // [PinkNoise] -> [Filter1] -> [Filter2] -> [Filter3] -> [NoiseGain] -> [BreathingMultiplier] -> [MasterGain]
+        // [Osc1, Osc2] -> [TriangleGain] -> [AmbienceGain]
+        // [PinkNoise] -> [Filter1] -> [Filter2] -> [Filter3] -> [NoiseGain] -> [BreathingMultiplier] -> [AmbienceGain]
         // [BreathingLFO] -> [BreathingGain] -> [BreathingMultiplier.gain]
-        // [MasterGain] -> [Destination]
+        // [AmbienceGain] -> [MasterGain] -> [Destination]
 
-        this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = 1.0; // Locked at 1.0
-        this.masterGain.connect(this.ctx.destination);
+        // Note: masterGain and ambienceGain are already created in constructor
 
         this.triangleGain = this.ctx.createGain();
         this.triangleGain.gain.value = 0;
-        this.triangleGain.connect(this.masterGain);
+        this.triangleGain.connect(this.ambienceGain); // Route to Ambience Bus
 
         // Breathing Multiplier (Modulates Noise)
         this.breathingMultiplier = this.ctx.createGain();
         this.breathingMultiplier.gain.value = 1.0; // Default unity
-        this.breathingMultiplier.connect(this.masterGain);
+        this.breathingMultiplier.connect(this.ambienceGain); // Route to Ambience Bus
 
         this.noiseGain = this.ctx.createGain();
         this.noiseGain.gain.value = 0.445;
@@ -349,3 +441,4 @@ export class AudioController {
         });
     }
 }
+
