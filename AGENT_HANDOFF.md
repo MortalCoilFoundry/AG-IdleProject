@@ -1,38 +1,28 @@
 # Agent Handoff
 
 ## Summary of Work
-I have implemented the **Slope Physics** and **Flowing Field Visualization**, refined the **Visual Polish**, and enforced **Grid Constraints**.
+I have overhauled the **Physics Engine** to implement a "Grass Feel" using **Linear Drag** and **Static Friction**, and added visual polish with a **Puff Particle Effect**.
 
 ### Completed Features
-1.  **Slope Physics**:
-    - Implemented in `Physics.js`.
-    - Slopes apply constant acceleration (`vx`, `vy`) to the ball.
-    - Added "Gentle" (0.05), "Moderate" (0.1), and "Steep" (0.15) slope types.
-2.  **Flowing Field Visualization**:
-    - Implemented in `Renderer.js`.
-    - Arrows (`>`, `>>`, `>>>`) scroll in the direction of the force.
-    - **Polish**:
-        - **Animation**: Slow, smooth scrolling (div 150).
-        - **Transparency**: 0.6 alpha for a "painted on" look.
-        - **Clipping**: Arrows are cleanly clipped to the slope zone.
-        - **Density**: Tighter grid (60x30) for a cohesive field effect.
-3.  **Grid Constraints**:
-    - Slopes in `TestChamber.js` now align to the **60px Engineering Grid**.
-    - This ensures perfect tiling and alignment with the world.
-4.  **Visual Polish**:
-    - **Sand Texture**: Added procedural noise (speckles) to sand hazards in `Renderer.js`.
-    - **Render Order**: Confirmed Slopes draw on top of Sand.
-    - **Ball Size**: Increased radius to 7.
+1.  **Physics Overhaul**:
+    -   **Linear Drag**: Replaced exponential decay with linear subtraction (`speed - friction`).
+        -   Grass: 0.03/frame.
+        -   Sand: 0.15/frame.
+    -   **Static Friction**: Implemented a "sticky" threshold. Ball stops if speed < 0.1 and forces < 0.08.
+    -   **Global Stop Check**: Added a failsafe to ensure the ball stops if speed < 0.01, preventing soft-locks near the hole.
+2.  **Visual Polish**:
+    -   **Puff Effect**: Emits 5 small dark green particles (`#306230`) when the ball stops, simulating settling into grass.
+3.  **Bug Fixes**:
+    -   **Unselectable Ball**: Fixed a critical issue where the ball would get stuck in a "moving" state near the hole because the Static Friction check was skipped. Added a global velocity check to resolve this.
 
 ### Current State
-- **Test Chamber**: Contains a gentle slope and a steep slope, both aligned to the grid.
-- **Codebase**: `Physics.js` and `Renderer.js` are updated and stable.
-- **Documentation**: `GDD.md` has been updated with the new mechanics and design rules.
+-   **Physics**: The ball now has weight and stops decisively. It feels more like golf and less like air hockey.
+-   **Codebase**: `Physics.js` and `Particles.js` are updated.
+-   **Documentation**: `GDD.md` reflects the new physics model.
 
 ## Next Steps
-- **Level Design**: Use the new slope mechanics to create puzzle levels (e.g., using slopes to counteract wind or guide the ball around hazards).
-- **Editor**: If a level editor is built, ensure it enforces the 60px grid for slopes.
-- **Texture Work**: The ball size increase (r=7) prepares for future sprite/texture work.
+-   **Level Design**: Test the new physics on complex slopes. The "stickiness" might make some gentle slopes playable that were previously impossible.
+-   **Tuning**: The friction values (0.03 / 0.15) might need fine-tuning based on player feedback.
 
 ## Known Issues / Challenges
-- **GDD Update**: Had some trouble matching text in `GDD.md` for the "Polish" section update due to whitespace/formatting. Ensure this is verified.
+-   **Challenge**: The "Unselectable Ball" bug was a subtle interaction between the Gravity Well logic and the Stop Threshold. The fix (Global Stop Check) seems robust but should be kept in mind if similar soft-locks occur.

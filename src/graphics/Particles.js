@@ -1,6 +1,15 @@
+import { eventBus } from '../core/EventBus.js';
+
 export class ParticleSystem {
     constructor() {
         this.particles = [];
+
+        eventBus.on('BALL_STOPPED', (data) => {
+            if (data && data.x !== undefined && data.y !== undefined) {
+                // Emit "Puff" - 4-5 small dark green particles at the ball's base
+                this.emit(data.x, data.y, '#306230', 5, 1.5);
+            }
+        });
     }
 
     emit(x, y, color, count = 5, speed = 2) {

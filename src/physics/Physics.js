@@ -11,21 +11,84 @@ export class Physics {
     update(ball, level) {
         if (!ball.isMoving) return;
 
-        // Apply Friction
-        let friction = this.frictionGrass;
+        // 1. Accumulate External Forces (Slope + Wind)
+        let forceX = 0;
+        let forceY = 0;
+
+        // Apply Wind (Add to force, don't modify velocity directly yet)
+        if (level.entities) {
+            for (const entity of level.entities) {
+                if (entity.type === 'wind') {
+                    if (ball.x >= entity.x && ball.x <= entity.x + entity.width &&
+                        ball.y >= entity.y && ball.y <= entity.y + entity.height) {
+                        forceX += entity.vx;
+                        forceY += entity.vy;
+                    }
+                }
+            }
+        }
+
+        // Apply Slopes (Add to force)
+        if (level.slopes) {
+            for (const slope of level.slopes) {
+                if (ball.x >= slope.x && ball.x <= slope.x + slope.width &&
+                    ball.y >= slope.y && ball.y <= slope.y + slope.height) {
+                    forceX += slope.vx;
+                    forceY += slope.vy;
+                }
+            }
+        }
+
+        // 2. Apply Acceleration
+        ball.vx += forceX;
+        ball.vy += forceY;
+
+        // 3. Apply Linear Friction (The "Brake")
+        let speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+        let friction = 0.03; // Base Grass Friction
+
+        // Check Hazard State
         if (this.isInSand(ball, level)) {
-            friction = this.frictionSand;
+            friction = 0.15;
             eventBus.emit('SAND_ENTER', { x: ball.x, y: ball.y });
         }
 
-        ball.vx *= friction;
-        ball.vy *= friction;
+        if (speed > 0) {
+            // Linear Subtraction: Reduce speed by a fixed amount per frame
+            let newSpeed = Math.max(0, speed - friction);
 
-        // Apply Wind
-        this.applyWind(ball, level);
+            // Re-scale the vector
+            let scale = newSpeed / speed;
+            ball.vx *= scale;
+            ball.vy *= scale;
 
-        // Apply Slopes
-        this.applySlopes(ball, level);
+            // Update speed for next check
+            speed = newSpeed;
+        }
+
+        // 4. Static Friction Check (The "Stick")
+        // If we are barely moving and the external force is weak, stop completely.
+        let totalForce = Math.sqrt(forceX * forceX + forceY * forceY);
+
+        // Check if we are in a gravity well (Hole) - Don't stick if falling in!
+        let inGravityWell = false;
+        if (level.hole) {
+            const dx = level.hole.x - ball.x;
+            const dy = level.hole.y - ball.y;
+            if (Math.sqrt(dx * dx + dy * dy) < level.hole.radius + ball.radius + 10) {
+                inGravityWell = true;
+            }
+        }
+
+        if (speed < 0.1 && totalForce < 0.08 && !inGravityWell) {
+            ball.vx = 0;
+            ball.vy = 0;
+
+            if (ball.isMoving) {
+                ball.isMoving = false;
+                eventBus.emit('BALL_STOPPED', { x: ball.x, y: ball.y });
+            }
+        }
 
         // Update Position
         ball.x += ball.vx;
@@ -46,13 +109,15 @@ export class Physics {
         // Hole Gravity
         this.handleHole(ball, level);
 
-        // Stop Threshold
-        const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-        if (speed < this.stopThreshold) {
+        // 5. Global Stop Check (The Fix)
+        // Ensure ball stops if it's moving incredibly slowly, regardless of where it is.
+        // This prevents soft-locks near the hole where "Static Friction" is skipped.
+        const currentSpeed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+        if (ball.isMoving && currentSpeed < 0.01) {
             ball.vx = 0;
             ball.vy = 0;
             ball.isMoving = false;
-            eventBus.emit('BALL_STOPPED');
+            eventBus.emit('BALL_STOPPED', { x: ball.x, y: ball.y });
         }
     }
 
@@ -67,30 +132,9 @@ export class Physics {
         return false;
     }
 
-    applyWind(ball, level) {
-        if (!level.entities) return;
-        for (const entity of level.entities) {
-            if (entity.type === 'wind') {
-                if (ball.x >= entity.x && ball.x <= entity.x + entity.width &&
-                    ball.y >= entity.y && ball.y <= entity.y + entity.height) {
-                    ball.vx += entity.vx;
-                    ball.vy += entity.vy;
-                    // Optional: emit event for particles if needed, but might be too frequent
-                }
-            }
-        }
-    }
 
-    applySlopes(ball, level) {
-        if (!level.slopes) return;
-        for (const slope of level.slopes) {
-            if (ball.x >= slope.x && ball.x <= slope.x + slope.width &&
-                ball.y >= slope.y && ball.y <= slope.y + slope.height) {
-                ball.vx += slope.vx;
-                ball.vy += slope.vy;
-            }
-        }
-    }
+
+
 
     checkBoosts(ball, level) {
         if (!level.entities) return;
@@ -247,21 +291,54 @@ export class Physics {
         const dy = hole.y - ball.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < hole.radius + ball.radius) { // Simple overlap check
-            const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+        const HOLE_RADIUS = hole.radius || 12;
+        const RIM_THRESHOLD = 15; // Slightly larger than visual hole
+        const CAPTURE_SPEED = 3.0;
+        const GRAVITY_STRENGTH = 0.5;
 
-            // Gravity well effect
-            if (speed < 15) { // Only suck if moving reasonably slow
-                ball.vx += dx * 0.05;
-                ball.vy += dy * 0.05;
-            }
+        // 1. Ignore Zone
+        if (dist >= RIM_THRESHOLD + ball.radius) return;
 
-            if (dist < 5 && speed < 5) { // Close enough and slow enough
-                ball.vx = 0;
-                ball.vy = 0;
-                ball.isMoving = false;
-                eventBus.emit('HOLE_REACHED');
+        const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+
+        // 2. Capture Zone (Success)
+        // Must be close and slow enough
+        if (dist < 5 && speed < CAPTURE_SPEED) {
+            ball.vx = 0;
+            ball.vy = 0;
+            ball.isMoving = false;
+            eventBus.emit('HOLE_REACHED');
+            return;
+        }
+
+        // 3. Rim Zone (Deflection / Lip-Out)
+        // If we are here, we are close (dist < RIM_THRESHOLD) but NOT captured yet.
+
+        // If moving too fast to be captured, deflect!
+        if (speed > CAPTURE_SPEED) {
+            // Apply Deflection Force (Pull towards center)
+            // Normalize vector
+            const nx = dx / dist;
+            const ny = dy / dist;
+
+            ball.vx += nx * GRAVITY_STRENGTH;
+            ball.vy += ny * GRAVITY_STRENGTH;
+
+            // Dampen velocity (Energy loss on rim hit)
+            ball.vx *= 0.9;
+            ball.vy *= 0.9;
+
+            // Audio/Visual Trigger (Throttled)
+            const now = Date.now();
+            if (!this.lastRimHitTime || now - this.lastRimHitTime > 200) {
+                eventBus.emit('HOLE_LIP', { x: ball.x, y: ball.y, dx: -nx, dy: -ny }); // Pass normal for particles
+                this.lastRimHitTime = now;
             }
+        } else {
+            // If slow enough but not yet in center (dist >= 5), gently pull in
+            // This helps the "Capture Zone" check succeed on next frame
+            ball.vx += dx * 0.1;
+            ball.vy += dy * 0.1;
         }
     }
 }

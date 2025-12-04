@@ -64,6 +64,13 @@ export class Game {
             }, 2000);
         });
 
+        eventBus.on('HOLE_LIP', (data) => {
+            this.audio.playHoleLip();
+            // Emit particles moving AWAY from hole (using the normal passed in data)
+            // data.dx/dy is the vector pointing AWAY from hole center
+            this.particles.emit(data.x, data.y, '#306230', 2, 2);
+        });
+
         eventBus.on('BALL_STOPPED', () => {
             // Re-enable input (handled by Input class checking isMoving)
         });

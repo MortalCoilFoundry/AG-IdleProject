@@ -189,6 +189,11 @@ export class AudioController {
         setTimeout(() => this.playTone(800, 'sine', 0.2), 200);
     }
 
+    playHoleLip() {
+        // "Tock" sound: Square wave, 150Hz, short decay
+        this.playTone(150, 'square', 0.05);
+    }
+
     playWin() {
         this.playTone(300, 'square', 0.2);
         setTimeout(() => this.playTone(400, 'square', 0.2), 200);

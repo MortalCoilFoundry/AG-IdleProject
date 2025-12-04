@@ -97,6 +97,7 @@ A dedicated debugging level (`TestChamber.js`) accessible via the Course Select 
   - **Particles**: Square debris on shots, wall hits, and hole-ins.
   - **Screen Shake**: Camera offset applied on wall impacts.
   - **Sand Texture**: Procedural noise (speckles) added to hazards for grit.
+  - **Ball Stop**: "Puff" of dark green particles (`#306230`) emitted when the ball settles.
 - **Audio Architecture**:
   - **Buses**: 5-channel mixing board (`master`, `music`, `ambience`, `ui`, `sfx`) via Web Audio API `GainNodes`.
   - **Routing**:
