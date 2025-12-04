@@ -107,8 +107,24 @@ export class Renderer {
         if (level.hazards) {
             for (const hazard of level.hazards) {
                 this.ctx.fillRect(hazard.x, hazard.y, hazard.width, hazard.height);
+
+                // Sand Noise
+                this.ctx.save();
+                this.ctx.fillStyle = '#0f380f'; // Darkest green
+                this.ctx.globalAlpha = 0.1; // Subtle
+                // Density: 1 dot per 400px area (20x20)
+                const dotCount = (hazard.width * hazard.height) / 400;
+                for (let i = 0; i < dotCount; i++) {
+                    const nx = hazard.x + Math.random() * hazard.width;
+                    const ny = hazard.y + Math.random() * hazard.height;
+                    this.ctx.fillRect(nx, ny, 2, 2);
+                }
+                this.ctx.restore();
             }
         }
+
+        // Draw Slopes
+        this.drawSlopes(level);
 
         // Draw Entities (Wind, Boosts, Switches, etc.)
         this.drawEntities(level);
@@ -141,6 +157,69 @@ export class Renderer {
                 case 'gate': this.drawGate(entity); break;
             }
         }
+    }
+
+    drawSlopes(level) {
+        if (!level.slopes) return;
+
+        this.ctx.save();
+        this.ctx.font = '12px "Press Start 2P"'; // Crisp font size
+        this.ctx.fillStyle = this.colors.dark; // #306230
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+
+        const gridX = 60;
+        const gridY = 30; // Tighter vertical density
+        const time = Date.now() / 150; // Animation speed (Slower)
+
+        this.ctx.globalAlpha = 0.6; // Semi-transparent arrows
+
+        for (const slope of level.slopes) {
+            // Calculate magnitude
+            const magnitude = Math.sqrt(slope.vx * slope.vx + slope.vy * slope.vy);
+
+            // Determine base char
+            let baseChar = '';
+            if (Math.abs(slope.vx) > Math.abs(slope.vy)) {
+                baseChar = slope.vx > 0 ? '>' : '<';
+            } else {
+                baseChar = slope.vy > 0 ? 'v' : '^';
+            }
+
+            // Determine tier string
+            let char = baseChar;
+            if (magnitude >= 0.15) {
+                char = baseChar.repeat(3);
+            } else if (magnitude >= 0.08) {
+                char = baseChar.repeat(2);
+            }
+
+            // Animation Offsets
+            const offsetX = (time * slope.vx * 100) % gridX;
+            const offsetY = (time * slope.vy * 100) % gridY;
+
+            // Clip to zone
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.rect(slope.x, slope.y, slope.width, slope.height);
+            this.ctx.clip();
+
+            // Render Loop
+            // We expand the loop range slightly to ensure coverage during scrolling
+            for (let x = -gridX; x < slope.width + gridX; x += gridX) {
+                for (let y = -gridY; y < slope.height + gridY; y += gridY) {
+
+                    // Calculate raw position with offset
+                    let drawX = slope.x + x + offsetX;
+                    let drawY = slope.y + y + offsetY;
+
+                    this.ctx.fillText(char, drawX, drawY);
+                }
+            }
+            this.ctx.restore(); // Remove clip
+        }
+        this.ctx.globalAlpha = 1.0; // Reset alpha
+        this.ctx.restore();
     }
 
     drawWind(entity) {

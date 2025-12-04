@@ -24,6 +24,9 @@ export class Physics {
         // Apply Wind
         this.applyWind(ball, level);
 
+        // Apply Slopes
+        this.applySlopes(ball, level);
+
         // Update Position
         ball.x += ball.vx;
         ball.y += ball.vy;
@@ -74,6 +77,17 @@ export class Physics {
                     ball.vy += entity.vy;
                     // Optional: emit event for particles if needed, but might be too frequent
                 }
+            }
+        }
+    }
+
+    applySlopes(ball, level) {
+        if (!level.slopes) return;
+        for (const slope of level.slopes) {
+            if (ball.x >= slope.x && ball.x <= slope.x + slope.width &&
+                ball.y >= slope.y && ball.y <= slope.y + slope.height) {
+                ball.vx += slope.vx;
+                ball.vy += slope.vy;
             }
         }
     }

@@ -20,6 +20,11 @@
   - Walls: Restitution 0.75 (Bounce).
   - Stop Threshold: Velocity < 0.05 sets state to `isMoving = false`.
 - **Gravity Well**: Hole applies centripetal force when ball is close and slow (< 15 speed).
+- **Slopes**:
+  - **Function**: Apply constant acceleration force (gravity) to the ball.
+  - **Tiers**: Gentle (0.05), Moderate (0.1), Steep (0.15).
+  - **Visualization**: "Flowing Field" of arrows scrolling in the direction of force.
+  - **Grid Constraint**: Slopes must align to the 60px engineering grid.
 
 ### Game Loop
 - **Stroke Counter**: Tracks attempts vs PAR.
@@ -80,12 +85,18 @@ The game uses a global `EventBus` to manage state transitions:
 2.  **The Bank**: Central obstacle. Teaches wall bouncing. PAR 3.
 3.  **The Trap**: Large sand hazard. Teaches friction management. PAR 3.
 
+### Test Chamber (Sandbox)
+A dedicated debugging level (`TestChamber.js`) accessible via the Course Select menu.
+- **Purpose**: Rapid prototyping of mechanics (Wind, Slopes, Hazards) without altering campaign levels.
+- **Features**: Infinite loop (reloads itself on completion), contains entity types for testing.
+
 ## 5. Polish & Juice (Implemented)
 - **Visuals**:
   - **Scanlines**: CSS overlay for LCD effect.
   - **Font**: "Press Start 2P" (Google Fonts).
   - **Particles**: Square debris on shots, wall hits, and hole-ins.
   - **Screen Shake**: Camera offset applied on wall impacts.
+  - **Sand Texture**: Procedural noise (speckles) added to hazards for grit.
 - **Audio Architecture**:
   - **Buses**: 5-channel mixing board (`master`, `music`, `ambience`, `ui`, `sfx`) via Web Audio API `GainNodes`.
   - **Routing**:

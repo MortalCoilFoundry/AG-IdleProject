@@ -1,37 +1,38 @@
-# Agent Handoff: Retro Putt
+# Agent Handoff
 
-## Current State
-**Camera-Enabled Pixel Perfection**. The game now supports a **600x600 logical world** viewed through a **540x540 viewport** via a clamped camera system. This resolves previous visibility issues where content > 540px was inaccessible.
+## Summary of Work
+I have implemented the **Slope Physics** and **Flowing Field Visualization**, refined the **Visual Polish**, and enforced **Grid Constraints**.
 
-## Critical Architecture (DO NOT BREAK)
-### 1. Rendering (Camera & Viewport)
--   **Viewport**: Fixed at 540x540, offset by (30, 60).
--   **Camera**: Tracks the ball, clamped to world bounds (0-600).
--   **Translation**: `Renderer.startScene()` applies `translate(VIEWPORT_X - cameraX, VIEWPORT_Y - cameraY)`. **Always maintain this order.**
--   **CSS**: `#game-container` uses `box-sizing: border-box` to ensure the 4px border doesn't cause overflow/cutoff.
+### Completed Features
+1.  **Slope Physics**:
+    - Implemented in `Physics.js`.
+    - Slopes apply constant acceleration (`vx`, `vy`) to the ball.
+    - Added "Gentle" (0.05), "Moderate" (0.1), and "Steep" (0.15) slope types.
+2.  **Flowing Field Visualization**:
+    - Implemented in `Renderer.js`.
+    - Arrows (`>`, `>>`, `>>>`) scroll in the direction of the force.
+    - **Polish**:
+        - **Animation**: Slow, smooth scrolling (div 150).
+        - **Transparency**: 0.6 alpha for a "painted on" look.
+        - **Clipping**: Arrows are cleanly clipped to the slope zone.
+        - **Density**: Tighter grid (60x30) for a cohesive field effect.
+3.  **Grid Constraints**:
+    - Slopes in `TestChamber.js` now align to the **60px Engineering Grid**.
+    - This ensures perfect tiling and alignment with the world.
+4.  **Visual Polish**:
+    - **Sand Texture**: Added procedural noise (speckles) to sand hazards in `Renderer.js`.
+    - **Render Order**: Confirmed Slopes draw on top of Sand.
+    - **Ball Size**: Increased radius to 7.
 
-### 2. Input System (World-Aware)
--   **Mapping**: Input coordinates must now account for **both** the viewport offset (-30, -60) **AND** the camera offset (+cameraX, +cameraY).
--   **Logic**: `Input.js` maps screen clicks -> logical world coordinates.
-
-## Troubleshooting & Lessons Learned
--   **The "Invisible Level" Trap**: The previous agent set up a 600x600 world in a 540x540 viewport *without* a camera, making the bottom 60px (where Level 6 starts) invisible. **Lesson**: Always verify that logical bounds fit within the visible viewport, or implement scrolling immediately.
--   **CSS Box Model**: The game container was being cut off by 4px because `box-sizing: border-box` was missing. **Lesson**: When using `min(100vw...)`, always account for borders/padding.
--   **Input Sync**: When adding a camera, you **MUST** update the Input system. If you scroll the world but not the input, clicks will drift.
+### Current State
+- **Test Chamber**: Contains a gentle slope and a steep slope, both aligned to the grid.
+- **Codebase**: `Physics.js` and `Renderer.js` are updated and stable.
+- **Documentation**: `GDD.md` has been updated with the new mechanics and design rules.
 
 ## Next Steps
--   **Level Design**: You now have the full 600x600 space (and potentially more if you expand `LOGICAL_WIDTH/HEIGHT`).
--   **Polish**: The camera snaps instantly. Consider adding **smooth lerping** (e.g., `camX += (targetX - camX) * 0.1`) for a better feel.
--   **Debug**: The Level Select is currently enabled in `index.html`. Hide it for production.
+- **Level Design**: Use the new slope mechanics to create puzzle levels (e.g., using slopes to counteract wind or guide the ball around hazards).
+- **Editor**: If a level editor is built, ensure it enforces the 60px grid for slopes.
+- **Texture Work**: The ball size increase (r=7) prepares for future sprite/texture work.
 
-## Recent Features (Audio & UI)
-### Audio System Refactor
--   **Buses**: 5-channel architecture (`master`, `music`, `ambience`, `ui`, `sfx`).
--   **Persistence**: Settings saved to `localStorage` key `retro-putt-settings`.
--   **Routing**: All new sounds **MUST** be routed to the appropriate bus (e.g., `this.sfxGain`) instead of `destination`.
-
-### UI Framework
--   **Settings Modal**: Implemented in `src/ui/SettingsModal.js`.
--   **Retro Meter**: Custom volume control UI using blocks.
--   **Integration**: Wired to `#bottom-ribbon`.
--   **DOM Structure**: Requires `#modal-overlay` and `#modal-container` in `index.html`.
+## Known Issues / Challenges
+- **GDD Update**: Had some trouble matching text in `GDD.md` for the "Polish" section update due to whitespace/formatting. Ensure this is verified.

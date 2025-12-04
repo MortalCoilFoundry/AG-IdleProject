@@ -541,3 +541,21 @@ body {
     background: var(--color-light);
     color: var(--color-darkest);
 }
+
+/* =========================================
+   LEVEL INDICATOR
+   ========================================= */
+#level-indicator {
+    position: fixed;
+    top: 70px;
+    left: 10px;
+    z-index: 10;
+    background: var(--color-darkest);
+    color: var(--color-lightest);
+    border: 2px solid var(--color-dark);
+    font-family: 'Press Start 2P', cursive;
+    font-size: 12px;
+    padding: 8px;
+    pointer-events: none;
+    box-shadow: 2px 2px 0 var(--color-darkest);
+}

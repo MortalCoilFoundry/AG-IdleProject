@@ -29,7 +29,7 @@ export class Game {
         this.ball = {
             x: 0, y: 0,
             vx: 0, vy: 0,
-            radius: 5,
+            radius: 7,
             isMoving: false
         };
 
@@ -115,28 +115,7 @@ export class Game {
             if (e.key === 'w') this.showWindArrows = !this.showWindArrows;
         });
 
-        // Debug Level Select
-        const levelSelect = document.getElementById('level-select');
-        console.log("Debug: levelSelect found?", levelSelect);
-        console.log("Debug: Levels available:", this.levelManager.levels.length);
 
-        if (levelSelect) {
-            this.levelManager.levels.forEach((level, index) => {
-                const option = document.createElement('option');
-                option.value = index;
-                option.text = `Level ${index + 1}`;
-                levelSelect.appendChild(option);
-            });
-
-            levelSelect.addEventListener('change', (e) => {
-                this.levelManager.currentLevelIndex = parseInt(e.target.value);
-                this.renderer.resetWindEmitters();
-                this.audio.setWind([]);
-                this.loadLevel();
-                // Remove focus so keyboard controls still work
-                e.target.blur();
-            });
-        }
 
         // Resume Audio Context on first interaction
         const resumeAudio = () => {
@@ -369,10 +348,14 @@ export class Game {
             this.audio.setWind([]);
         }
 
-        // Sync Debug Level Select
-        const levelSelect = document.getElementById('level-select');
-        if (levelSelect) {
-            levelSelect.value = this.levelManager.currentLevelIndex;
+        // Update Level Indicator
+        const levelIndicator = document.getElementById('level-indicator');
+        if (levelIndicator) {
+            if (this.levelManager.overrideLevel) {
+                levelIndicator.textContent = "TEST CHAMBER";
+            } else {
+                levelIndicator.textContent = `LEVEL ${this.levelManager.currentLevelIndex + 1}`;
+            }
         }
     }
 
