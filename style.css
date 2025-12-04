@@ -489,3 +489,55 @@ body {
         margin: 0 1px;
     }
 }
+
+/* =========================================
+   COURSE MODAL
+   ========================================= */
+
+.course-section {
+    margin-bottom: 20px;
+}
+
+.section-title {
+    font-size: 14px;
+    color: var(--color-light);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.full-width {
+    width: 100%;
+}
+
+.campaign-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    justify-items: center;
+}
+
+.campaign-btn {
+    width: 40px;
+    height: 40px;
+    background: var(--color-dark);
+    color: var(--color-lightest);
+    border: 2px solid var(--color-darkest);
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--color-darkest);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.campaign-btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: none;
+}
+
+.campaign-btn:hover {
+    background: var(--color-light);
+    color: var(--color-darkest);
+}

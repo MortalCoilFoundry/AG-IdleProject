@@ -346,8 +346,14 @@ export class AudioController {
         if (hasWind) {
             const totalStr = zones.reduce((sum, z) => sum + z.strength, 0);
             const avgStr = totalStr / zones.length;
-            this.currentWindStrength = avgStr;
-            targetFreq = 60 + avgStr * 15;
+            // FIX: Sanitize the result. If NaN, default to 0.
+            this.currentWindStrength = Number.isFinite(avgStr) ? avgStr : 0;
+
+            // Calculate target frequency
+            let calculatedFreq = 60 + this.currentWindStrength * 15;
+
+            // FIX: Sanitize frequency. If NaN, default to 60.
+            targetFreq = Number.isFinite(calculatedFreq) ? calculatedFreq : 60;
         }
 
         // === ONLY APPLY CALM BREATHING IF WE ARE ACTUALLY IN CALM STATE ===
@@ -374,7 +380,7 @@ export class AudioController {
             }
         }
 
-        // Pitch ramp (always safe)
+        // When applying the ramp, use the sanitized targetFreq
         this.windOsc1.frequency.cancelScheduledValues(now);
         this.windOsc1.frequency.setTargetAtTime(targetFreq + 1, now, 2.0);
 

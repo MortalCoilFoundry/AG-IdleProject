@@ -3,6 +3,7 @@ import { eventBus } from '../core/EventBus.js';
 export class LevelManager {
     constructor() {
         this.currentLevelIndex = 0;
+        this.overrideLevel = null; // For Test Chamber / One-off levels
         this.levels = [
             // Level 1: The Green
             {
@@ -250,11 +251,24 @@ export class LevelManager {
         return 1;
     }
 
+    loadOneOff(levelData) {
+        this.overrideLevel = levelData;
+    }
+
+    enterCampaign() {
+        this.overrideLevel = null;
+    }
+
     getCurrentLevel() {
-        return this.levels[this.currentLevelIndex];
+        return this.overrideLevel || this.levels[this.currentLevelIndex];
     }
 
     nextLevel() {
+        if (this.overrideLevel) {
+            // Loop the test chamber
+            return this.overrideLevel;
+        }
+
         this.currentLevelIndex++;
         if (this.currentLevelIndex >= this.levels.length) {
             return null; // Game Over
@@ -263,6 +277,7 @@ export class LevelManager {
     }
 
     reset() {
+        this.overrideLevel = null;
         this.currentLevelIndex = 0;
         return this.getCurrentLevel();
     }

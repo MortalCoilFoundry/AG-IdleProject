@@ -1,5 +1,7 @@
 import { Game } from './core/Game.js';
 import { SettingsModal } from './ui/SettingsModal.js';
+import { CourseModal } from './ui/CourseModal.js';
+import { GameManager } from './core/GameManager.js';
 
 window.addEventListener('DOMContentLoaded', () => {
     console.log("Debug: main.js loaded");
@@ -11,8 +13,15 @@ window.addEventListener('DOMContentLoaded', () => {
         game.audio.loadMusic('assets/music/track1.mp3');
     }
 
+    // Initialize Core Managers
+    const gameManager = new GameManager(game);
+
     // Initialize UI Components
     const settingsModal = new SettingsModal(game.audio);
+    const courseModal = new CourseModal('modal-container', 'modal-overlay', {
+        onTestChamber: () => gameManager.startTestSession(),
+        onCampaignLevel: (index) => gameManager.startCampaignLevel(index)
+    });
 
     // Start Screen Logic
     const startScreen = document.getElementById('start-screen');
@@ -55,6 +64,9 @@ window.addEventListener('DOMContentLoaded', () => {
             const section = btn.dataset.section;
             if (section === 'settings') {
                 settingsModal.render();
+                game.audio.playUiBlip();
+            } else if (section === 'courses') {
+                courseModal.open();
                 game.audio.playUiBlip();
             }
         });
