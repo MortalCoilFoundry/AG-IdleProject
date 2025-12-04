@@ -302,20 +302,51 @@ export class Renderer {
     }
 
     drawAimLine(ball, trajectory) {
-        if (!trajectory || trajectory.length < 2) return;
+        if (!trajectory || trajectory.length === 0) return;
 
-        this.ctx.strokeStyle = this.colors.lightest;
-        this.ctx.setLineDash([3, 3]);
-        this.ctx.lineWidth = 2;
+        // --- Animation Setup ---
+        const marchSpeed = 80; // Larger number = slower march
+        // Floor the time to get integer steps for the pattern
+        const timeOffset = Math.floor(Date.now() / marchSpeed);
+        const patternSpacing = 4; // Distance between "active" dots
 
+        // 1. Draw Breadcrumbs (The Path)
+        trajectory.forEach((point, index) => {
+            // Check if this specific dot is currently "active" in the wave pattern.
+            // Subtracting index ensures the wave moves "forward" along the path.
+            const isActive = (timeOffset - index) % patternSpacing === 0;
+
+            if (isActive) {
+                // --- ACTIVE STATE (The Flash) ---
+                // Draw a solid 4x4 block of the lightest color.
+                // This makes it "pop" against the background and the normal dots.
+                this.ctx.fillStyle = this.colors.lightest; // #9bbc0f
+                this.ctx.fillRect(point.x - 2, point.y - 2, 4, 4);
+
+            } else {
+                // --- NORMAL STATE (The Standard Breadcrumb) ---
+                // Outline (Darkest)
+                this.ctx.fillStyle = this.colors.darkest; // #0f380f
+                this.ctx.fillRect(point.x - 2, point.y - 2, 4, 4);
+
+                // Core (Lightest)
+                this.ctx.fillStyle = this.colors.lightest; // #9bbc0f
+                this.ctx.fillRect(point.x - 1, point.y - 1, 2, 2);
+            }
+        });
+
+        // 2. Draw Ghost Ball (The Destination)
+        const endPoint = trajectory[trajectory.length - 1];
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.5;
+        this.ctx.fillStyle = this.colors.lightest;
         this.ctx.beginPath();
-        this.ctx.moveTo(trajectory[0].x, trajectory[0].y);
-        for (let i = 1; i < trajectory.length; i++) {
-            this.ctx.lineTo(trajectory[i].x, trajectory[i].y);
-        }
+        this.ctx.arc(endPoint.x, endPoint.y, 6, 0, Math.PI * 2); // Radius 6 (slightly smaller than real ball)
+        this.ctx.fill();
+        this.ctx.strokeStyle = this.colors.darkest;
+        this.ctx.lineWidth = 1;
         this.ctx.stroke();
-
-        this.ctx.setLineDash([]);
+        this.ctx.restore();
     }
 
     initWindEmitters(zones) {

@@ -1,28 +1,33 @@
 # Agent Handoff
 
 ## Summary of Work
-I have overhauled the **Physics Engine** to implement a "Grass Feel" using **Linear Drag** and **Static Friction**, and added visual polish with a **Puff Particle Effect**.
+I have implemented the **Predictive Aim Line** to give players accurate feedback on their shots, accounting for the complex physics (Wind, Slopes, Drag) introduced recently.
 
 ### Completed Features
-1.  **Physics Overhaul**:
-    -   **Linear Drag**: Replaced exponential decay with linear subtraction (`speed - friction`).
-        -   Grass: 0.03/frame.
-        -   Sand: 0.15/frame.
-    -   **Static Friction**: Implemented a "sticky" threshold. Ball stops if speed < 0.1 and forces < 0.08.
-    -   **Global Stop Check**: Added a failsafe to ensure the ball stops if speed < 0.01, preventing soft-locks near the hole.
-2.  **Visual Polish**:
-    -   **Puff Effect**: Emits 5 small dark green particles (`#306230`) when the ball stops, simulating settling into grass.
-3.  **Bug Fixes**:
-    -   **Unselectable Ball**: Fixed a critical issue where the ball would get stuck in a "moving" state near the hole because the Static Friction check was skipped. Added a global velocity check to resolve this.
+1.  **Predictive Trajectory (`Physics.js`)**:
+    -   Added `simulateTrajectory(startBall, velocity, level)`:
+        -   Clones the ball and runs a simplified physics loop for up to 180 frames (3 seconds).
+        -   Applies **exact** game physics: Wind (`0.03` scalar), Slopes, Linear Drag (Grass vs Sand), and Wall Collisions.
+        -   Returns a sampled path (every 4th frame) and the final resting position.
+2.  **Visual Overhaul (`Renderer.js`)**:
+    -   **Breadcrumbs**: Replaced the simple dashed line with 2x2px dots (Lightest) with 1px borders (Darkest) to ensure visibility on all surfaces.
+    -   **Ghost Ball**: Added a semi-transparent ball at the end of the trajectory to show exactly where the putt will stop.
+3.  **Integration (`Game.js` & `Input.js`)**:
+    -   Refactored `Input.js` to strictly handle drag vector calculation (`getLaunchVelocity`).
+    -   Moved simulation orchestration to `Game.js`'s draw loop to keep concerns separated.
 
-### Current State
--   **Physics**: The ball now has weight and stops decisively. It feels more like golf and less like air hockey.
--   **Codebase**: `Physics.js` and `Particles.js` are updated.
--   **Documentation**: `GDD.md` reflects the new physics model.
+### Issues & Troubleshooting
+-   **Code Insertion**: Initial attempt to add `simulateTrajectory` to `Physics.js` failed due to a non-unique code anchor. Resolved by anchoring explicitly after the `handleHole` method.
+-   **Performance**: Simulation runs every frame while dragging. Capped at 180 frames (3s) to ensure 60fps performance is maintained.
+
+## Current State
+-   **Physics**: Solid. The aim line accurately reflects curve and roll distance.
+-   **Visuals**: The "Ghost Ball" provides excellent depth perception and "feel".
+-   **Codebase**: Clean separation between Input (User Intent), Physics (Simulation), and Renderer (Feedback).
 
 ## Next Steps
--   **Level Design**: Test the new physics on complex slopes. The "stickiness" might make some gentle slopes playable that were previously impossible.
--   **Tuning**: The friction values (0.03 / 0.15) might need fine-tuning based on player feedback.
-
-## Known Issues / Challenges
--   **Challenge**: The "Unselectable Ball" bug was a subtle interaction between the Gravity Well logic and the Stop Threshold. The fix (Global Stop Check) seems robust but should be kept in mind if similar soft-locks occur.
+-   **Polish**:
+    -   The "Ghost Ball" could pulse or fade in/out for more juice.
+    -   Add a "Max Power" indicator if the user drags beyond the clamp limit.
+-   **Bug Watch**:
+    -   Watch for edge cases where the simulation might diverge from actual physics (e.g., complex multi-object collisions which are simplified in the dry run).

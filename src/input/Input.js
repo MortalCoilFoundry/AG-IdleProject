@@ -150,116 +150,15 @@ export class Input {
         return { x: dx, y: dy };
     }
 
-    getAimPreview(level) {
-        if (!this.isDragging) return [];
+    getLaunchVelocity() {
+        if (!this.isDragging) return null;
 
         const drag = this.getDragVector();
-        if (!drag) return [];
+        if (!drag) return null;
 
-        // Calculate initial velocity based on drag
-        const vx = drag.x * this.powerScale;
-        const vy = drag.y * this.powerScale;
-
-        return this.simulateTrajectory(this.ball.x, this.ball.y, vx, vy, level);
-    }
-
-    simulateTrajectory(startX, startY, startVx, startVy, level) {
-        const points = [{ x: startX, y: startY }];
-        let x = startX;
-        let y = startY;
-        let currVx = startVx;
-        let currVy = startVy;
-        const dt = 0.016; // Simulation step (approx 60fps)
-        const maxSteps = 60; // Simulate 1 second ahead
-        let bounces = 0;
-        const maxBounces = 2;
-
-        for (let i = 0; i < maxSteps; i++) {
-            // Apply Friction
-            const speed = Math.sqrt(currVx * currVx + currVy * currVy);
-            if (speed < 0.1) break;
-
-            // Simplified friction (assuming grass for preview)
-            currVx *= 0.97;
-            currVy *= 0.97;
-
-            // Apply Wind
-            if (level.entities) {
-                for (const entity of level.entities) {
-                    if (entity.type === 'wind') {
-                        if (x >= entity.x && x <= entity.x + entity.width &&
-                            y >= entity.y && y <= entity.y + entity.height) {
-                            // Match Physics.js exactly: ball.vx += entity.vx
-                            // But since we simulate step-by-step, we apply it per step.
-                            // Physics.js applies it once per frame.
-                            // Our simulation step dt is 0.016 (1 frame).
-                            // So we should apply full entity.vx/vy per step.
-                            currVx += entity.vx;
-                            currVy += entity.vy;
-                        }
-                    }
-                }
-            }
-
-            let nextX = x + currVx;
-            let nextY = y + currVy;
-
-            // Wall Collisions (Basic AABB)
-            let hit = false;
-            // Canvas bounds
-            if (nextX < 0 || nextX > 600) {
-                currVx *= -0.75;
-                nextX = Math.max(0, Math.min(600, nextX));
-                hit = true;
-            }
-            if (nextY < 0 || nextY > 600) {
-                currVy *= -0.75;
-                nextY = Math.max(0, Math.min(600, nextY));
-                hit = true;
-            }
-
-            // Level walls
-            if (level.walls) {
-                for (const wall of level.walls) {
-                    if (nextX > wall.x && nextX < wall.x + wall.width &&
-                        nextY > wall.y && nextY < wall.y + wall.height) {
-
-                        // Determine side of collision (simplified)
-                        const prevX = x;
-                        const prevY = y;
-
-                        // Check X overlap from previous position
-                        const overlapX = prevX > wall.x && prevX < wall.x + wall.width;
-                        const overlapY = prevY > wall.y && prevY < wall.y + wall.height;
-
-                        if (overlapY) {
-                            currVx *= -0.75;
-                            nextX = x; // Revert X
-                        } else if (overlapX) {
-                            currVy *= -0.75;
-                            nextY = y; // Revert Y
-                        } else {
-                            // Corner hit or fast movement, bounce both
-                            currVx *= -0.75;
-                            currVy *= -0.75;
-                            nextX = x;
-                            nextY = y;
-                        }
-                        hit = true;
-                    }
-                }
-            }
-
-            if (hit) {
-                bounces++;
-                if (bounces > maxBounces) break;
-            }
-
-            x = nextX;
-            y = nextY;
-            points.push({ x, y });
-        }
-
-        return points;
+        return {
+            vx: drag.x * this.powerScale,
+            vy: drag.y * this.powerScale
+        };
     }
 }

@@ -513,8 +513,11 @@ export class Game {
             this.renderer.drawBall(this.ball); // Draw ball ON TOP
 
             if (!this.ball.isMoving && this.input.isDragging) {
-                const trajectory = this.input.getAimPreview(level);
-                this.renderer.drawAimLine(this.ball, trajectory);
+                const velocity = this.input.getLaunchVelocity();
+                if (velocity) {
+                    const trajectory = this.physics.simulateTrajectory(this.ball, velocity, level);
+                    this.renderer.drawAimLine(this.ball, trajectory);
+                }
             }
         }
 

@@ -11,25 +11,6 @@
 - Lightest: `#9bbc0f` (Ball/Highlight)
 
 ## 2. Core Mechanics
-### Physics
-- **Input**: Slingshot (Drag & Release). Power clamped to max length.
-- **Friction**:
-  - Grass: 0.97 decay/frame.
-  - Sand: 0.85 decay/frame (High drag).
-- **Collision**:
-  - Walls: Restitution 0.75 (Bounce).
-  - Stop Threshold: Velocity < 0.05 sets state to `isMoving = false`.
-- **Gravity Well**: Hole applies centripetal force when ball is close and slow (< 15 speed).
-- **Slopes**:
-  - **Function**: Apply constant acceleration force (gravity) to the ball.
-  - **Tiers**: Gentle (0.05), Moderate (0.1), Steep (0.15).
-  - **Visualization**: "Flowing Field" of arrows scrolling in the direction of force.
-  - **Grid Constraint**: Slopes must align to the 60px engineering grid.
-
-### Game Loop
-- **Stroke Counter**: Tracks attempts vs PAR.
-- **Progression**: Completing a hole loads the next level automatically after a delay.
-- **End Game**: Summary screen displaying Total Strokes vs Total PAR.
 
 ## 3. Architecture (Event-Driven)
 The game uses a global `EventBus` to manage state transitions:
@@ -59,32 +40,9 @@ The game uses a global `EventBus` to manage state transitions:
 ## 2. Core Mechanics
 ### Physics
 - **Input**: Slingshot (Drag & Release). Power clamped to max length.
-- **Friction**:
-  - Grass: 0.97 decay/frame.
-  - Sand: 0.85 decay/frame (High drag).
-- **Collision**:
-  - Walls: Restitution 0.75 (Bounce).
-  - Stop Threshold: Velocity < 0.05 sets state to `isMoving = false`.
-- **Gravity Well**: Hole applies centripetal force when ball is close and slow (< 15 speed).
-
-### Game Loop
-- **Stroke Counter**: Tracks attempts vs PAR.
-- **Progression**: Completing a hole loads the next level automatically after a delay.
-- **End Game**: Summary screen displaying Total Strokes vs Total PAR.
-
-## 3. Architecture (Event-Driven)
-The game uses a global `EventBus` to manage state transitions:
-- `STROKE_TAKEN`: Input released -> Increment strokes, lock input, play sound, emit particles.
-- `BALL_STOPPED`: Velocity threshold met -> Unlock input, enable aim line.
-- `WALL_HIT`: Collision detected -> Play sound, emit particles, shake screen.
-- `SAND_ENTER`: Hazard overlap -> Emit particles.
-- `HOLE_REACHED`: Gravity well success -> Play sound, emit particles, trigger `LEVEL_COMPLETE`.
-
-## 4. Levels
-1.  **The Green**: Open field. Teaches input. PAR 2.
-2.  **The Bank**: Central obstacle. Teaches wall bouncing. PAR 3.
-3.  **The Trap**: Large sand hazard. Teaches friction management. PAR 3.
-
+- **Predictive Aim**:
+  - **Simulation**: "Dry run" of physics engine (180 frames) accounting for Drag, Wind, and Slopes.
+  - **Visuals**: "Breadcrumb" trail (dots) showing path + "Ghost Ball" showing final resting position.
 ### Test Chamber (Sandbox)
 A dedicated debugging level (`TestChamber.js`) accessible via the Course Select menu.
 - **Purpose**: Rapid prototyping of mechanics (Wind, Slopes, Hazards) without altering campaign levels.
