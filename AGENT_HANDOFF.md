@@ -1,44 +1,53 @@
-# Agent Handoff
+# Agent Handoff - Phase 2.6 Complete
 
 ## Summary of Work
-I have completed a major overhaul of the aiming system, introducing a **Consumable Predictive Aim** mechanic and a persistent **Player State** system.
+I have completed **Phase 2.5 (Coordinate Sync)** and **Phase 2.6 (Global Renderer Audit)**. The primary goal was to resolve visual desyncs between the physics engine and the renderer by enforcing a strict "Golden Rule": **"If it exists in the World, it must pass through the Viewport."**
 
 ### Completed Features
-1.  **Predictive Aim (The "Power-Up")**:
-    -   **Physics Simulation**: Added `Physics.simulateTrajectory` which runs a 180-frame (3s) dry run of the game physics (Wind, Slopes, Drag, Walls) to predict the exact path.
-    -   **Visuals**: Implemented a "Retro Marquee" effect (Marching Ants) for the trajectory and a **Ghost Ball** at the final resting position.
-    -   **Gating**: This feature is gated behind a consumable item (`'prediction'`).
-2.  **Basic Aim (Default)**:
-    -   Implemented `Renderer.drawBasicAimLine` as a fallback. It draws a simple static dashed line based on the launch vector, clamped to 150px (visual cue stick).
-3.  **Player State System**:
-    -   Created `src/core/PlayerState.js` to manage inventory and currency.
-    -   **Persistence**: Saves/Loads from `localStorage` (`retro-putt-profile`).
-    -   **Defaults**: Starts with 5 free prediction charges.
-4.  **Game Integration**:
-    -   **Toggle**: Press **'P'** to toggle Prediction Mode (if charges exist).
-    -   **Consumption**: Taking a shot in Prediction Mode consumes 1 charge.
+1.  **Unified Coordinate System (`Viewport.js`)**:
+    -   Implemented `worldToScreen(worldX, worldY)` as the single source of truth for coordinate transformations.
+    -   All rendering now respects `viewport.zoom` and `viewport.x/y` (camera position).
+
+2.  **Global Renderer Audit (`Renderer.js`)**:
+    -   **Refactored**: `drawBall`, `drawAimLine`, `drawTrail`, `drawWindParticles`, `drawWind`, `drawMover`, `drawBoost`, `drawSwitch`, `drawGate`, and `drawSlopes`.
+    -   **New Methods**:
+        -   `drawHole(level)`: Draws the hole based on physics coordinates (`level.hole`) transformed to screen space.
+        -   `drawHazards(level)`: Draws sand traps using `getScreenRect`.
+        -   `getScreenRect(entity)`: Helper to transform entity bounds to screen space.
+    -   **Bedrock Rendering**: `clear()` now fills the background with `#0f380f` (darkest green), creating a visual "void" outside the playable map.
+
+3.  **Physics Debug Overlay**:
+    -   Added `drawPhysicsDebug(ball, tileMap)` (Toggle with **'D'**).
+    -   Visualizes the ball's physics body (Blue Circle) and the 3x3 wall neighborhood (Red Rects) exactly as the physics engine sees them.
+    -   **Fix**: Debug drawing is forced to be the **last** operation in the render loop to ensure visibility.
+
+4.  **Physics Robustness (`Physics.js`)**:
+    -   Fixed "Tunneling" issue by updating `handleWallCollisions` to check the full range of tiles covered by the ball's radius (`minCol` to `maxCol`), not just the center tile.
 
 ### Current State
--   **Physics**: The simulation logic in `simulateTrajectory` is a **duplicate** of the main `update` loop (minus side effects). It is currently 1:1 accurate.
--   **Visuals**: The distinction between "Basic" (Static) and "Predictive" (Animated) is clear and intuitive.
--   **Architecture**: `Game.js` orchestrates the switch between aiming modes based on `PlayerState`.
+-   **Visuals**: The game is now visually consistent. The "Invisible Hole" bug is fixed. Entities, particles, and the aim line align perfectly with the grid and walls.
+-   **Debug**: The 'D' key toggle is functional and reliable (case-insensitive).
+-   **Architecture**: `Renderer.js` is strictly decoupled from raw world coordinates.
 
-## Recurring Issues & Pitfalls
-### 1. Code Insertion Reliability
-I encountered multiple failures with `replace_file_content` when attempting to append methods to the end of classes (specifically in `Physics.js` and `Renderer.js`).
--   **Issue**: "Target content not unique" or "Target content cannot be empty".
--   **Workaround**: Always anchor new methods to the *closing brace of the previous method* rather than the end of the file or class. Do not rely on finding just `}`.
+## Known Issues & Redundancies (Context Rich)
 
-### 2. Physics Duplication Risk
--   **Risk**: `Physics.simulateTrajectory` manually replicates the logic of `Physics.update`.
--   **Mitigation**: Any future changes to friction, wind, or collision logic **MUST** be applied to both methods to prevent the aim line from lying to the player.
+### 1. Redundant Rendering Logic
+We now have two ways to draw Holes and Sand, which is a potential source of bugs or double-drawing:
+-   **Tile-Based**: `Renderer.drawTile` has cases for `'HOLE'` and `'SAND'`. This iterates the `tileMap`.
+-   **Entity-Based**: `Renderer.drawHole` uses `level.hole`, and `Renderer.drawHazards` uses `level.hazards`.
+-   **Risk**: If the `tileMap` contains 'HOLE' or 'SAND' tiles *AND* the `level` object has `hole`/`hazards` defined, we are drawing them twice.
+-   **Recommendation**: Decide on a single source of truth. If Holes and Hazards are "Entities" (which they seem to be for physics attributes like radius or friction), remove the rendering logic from `drawTile` or ensure the `tileMap` doesn't contain them.
 
-### 3. Performance
--   **Observation**: The simulation runs every frame while dragging. Capped at 180 frames, it seems stable on desktop, but complex levels with dozens of wind zones or moving obstacles could cause frame drops on lower-end devices.
+### 2. Physics Logic Duplication
+-   **Issue**: `Physics.simulateTrajectory` manually replicates the logic of `Physics.update` (including the new wall collision logic).
+-   **Risk**: If `update` is modified (e.g., friction changes, new forces), `simulateTrajectory` will drift out of sync, causing the aim line to lie to the player.
+-   **Recommendation**: Refactor the core physics step into a shared `step(ball, dt)` method that both `update` and `simulateTrajectory` can call.
+
+### 3. Infinite Level Rendering
+-   **Observation**: `Renderer.drawLevel` currently calculates visible bounds (`minCol` to `maxCol`) to optimize rendering. This is good. However, `drawHazards` and `drawEntities` iterate *all* entities in the level.
+-   **Future Optimization**: For truly infinite levels, we will need a spatial partition (e.g., QuadTree or Grid-based lookup) for entities to avoid iterating thousands of off-screen objects every frame.
 
 ## Next Steps
--   **UI**: The current feedback is `console.log` only. We need a real UI for:
-    -   Inventory Count (How many predictions left?)
-    -   Active Mode Indicator (Is Prediction ON?)
--   **Shop**: Implement a way to spend `currency` to buy more `prediction` charges.
--   **Refactor**: Consider unifying the physics step into a static helper or shared method to eliminate the duplication risk mentioned above.
+1.  **Cleanup**: Address the redundant rendering logic (Tile vs. Entity).
+2.  **UI**: Implement the UI for Inventory and Prediction Mode (as mentioned in previous handoff).
+3.  **Infinite Generation**: Proceed with Phase 3 to implement the procedural level generation.
