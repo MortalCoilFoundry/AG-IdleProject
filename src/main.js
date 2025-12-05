@@ -45,12 +45,12 @@ window.addEventListener('DOMContentLoaded', () => {
                     courseModal.open();
                     game.audio.playUiBlip();
                 } else if (section === 'editor') {
-                    if (editorSystem.enabled) {
-                        editorSystem.disable();
-                        btn.classList.remove('active'); // Optional visual feedback
+                    game.toggleEditor();
+
+                    if (game.mode === 'EDIT') {
+                        btn.classList.add('active');
                     } else {
-                        editorSystem.enable();
-                        btn.classList.add('active'); // Optional visual feedback
+                        btn.classList.remove('active');
                     }
                     game.audio.playUiBlip();
                 }

@@ -28,25 +28,19 @@ export class Viewport {
     }
 
     screenToGrid(screenX, screenY) {
-        // Inverse of gridToScreen
+        // Calculate Top-Left of the Viewport in World Coordinates
+        // this.x/y is the Center of the camera
+        const viewLeft = this.x - (this.width / 2) / this.zoom;
+        const viewTop = this.y - (this.height / 2) / this.zoom;
 
-        // 1. Remove screen center offset
-        const centeredX = screenX - (this.width / 2);
-        const centeredY = screenY - (this.height / 2);
+        // Add Screen Offset (scaled by zoom)
+        const worldX = viewLeft + (screenX / this.zoom);
+        const worldY = viewTop + (screenY / this.zoom);
 
-        // 2. Remove zoom
-        const unzoomedX = centeredX / this.zoom;
-        const unzoomedY = centeredY / this.zoom;
+        // Debug Log (Throttle this in production!)
+        // console.log(`screenToGrid: Screen(${screenX}, ${screenY}) -> World(${worldX}, ${worldY}) | ViewLeft(${viewLeft}) Width(${this.width}) Zoom(${this.zoom})`);
 
-        // 3. Add camera position to get world position
-        const worldX = unzoomedX + this.x;
-        const worldY = unzoomedY + this.y;
-
-        // 4. Convert to grid coordinates (Float)
-        const col = worldX / 60;
-        const row = worldY / 60;
-
-        return { col, row };
+        return { col: worldX / 60, row: worldY / 60 };
     }
 
     pan(dx, dy) {

@@ -8,9 +8,11 @@ import { ParticleSystem } from '../graphics/Particles.js';
 import { PlayerState } from './PlayerState.js';
 import { Viewport } from './Viewport.js';
 import { TileMap } from './TileMap.js';
+import { EditorSystem } from '../editor/EditorSystem.js';
 
 export class Game {
     constructor() {
+        console.log("Game Constructor Started");
         this.canvas = document.getElementById('game-canvas');
         this.ctx = this.canvas.getContext('2d');
 
@@ -50,6 +52,8 @@ export class Game {
         this.editorMode = false;
         this.editorSystem = null;
 
+        this.mode = 'LOADING'; // 'PLAY' or 'EDIT'
+
         this.ball = {
             x: 0, y: 0,
             vx: 0, vy: 0,
@@ -68,10 +72,41 @@ export class Game {
         this.init();
     }
 
+    setMode(mode) {
+        if (this.mode === mode) return;
+        this.mode = mode;
+
+        if (mode === 'EDIT') {
+            console.log("State Machine: Switching to", mode);
+            this.input.disable();
+            if (this.editorSystem) {
+                this.editorSystem.enable();
+            }
+            this.editorMode = true; // Keep flag for renderer checks
+        } else {
+            console.log("State Machine: Switching to", mode);
+            if (this.editorSystem) {
+                this.editorSystem.disable();
+            }
+            this.input.enable();
+            this.editorMode = false;
+        }
+    }
+
+    toggleEditor() {
+        if (this.mode === 'PLAY') {
+            this.setMode('EDIT');
+        } else {
+            this.setMode('PLAY');
+        }
+    }
+
     init() {
+        console.log("Game Init Started");
         this.loadLevel();
 
-        this.input = new Input(this.canvas, this.ball);
+        this.input = new Input(this.canvas, this.ball, this.audio);
+
 
         eventBus.on('STROKE_TAKEN', () => {
             this.strokes++;
@@ -175,8 +210,6 @@ export class Game {
             }
         });
 
-
-
         // Resume Audio Context on first interaction
         const resumeAudio = () => {
             this.audio.resume();
@@ -187,6 +220,8 @@ export class Game {
         window.addEventListener('keydown', resumeAudio);
 
         this.start();
+        this.editorSystem = new EditorSystem(this);
+        this.setMode('PLAY');
     }
 
     loadLevel() {
@@ -297,8 +332,8 @@ export class Game {
     updateUI() {
         const level = this.levelManager.getCurrentLevel();
         if (level) {
-            this.uiPar.textContent = level.par;
-            this.uiStrokes.textContent = this.strokes;
+            if (this.uiPar) this.uiPar.textContent = level.par;
+            if (this.uiStrokes) this.uiStrokes.textContent = this.strokes;
         }
     }
 
@@ -421,6 +456,9 @@ export class Game {
     draw() {
         this.renderer.clear();
         this.renderer.startScene(); // <--- Start Viewport Clip
+
+        // Debug Viewport Sync
+        // if (Math.random() > 0.99) console.log(`Draw: EditorMode=${this.editorMode} VP.y=${this.viewport.y}`);
 
         const level = this.levelManager.getCurrentLevel();
         if (level) {

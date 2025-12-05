@@ -1,75 +1,54 @@
-# Agent Handoff - Editor Overhaul & Core Refactoring
+# Agent Handoff - Input Arbitration & State Machine
 
 **Date:** 2025-12-05
-**Status:** Editor Core Implemented (View/Export/Import/Grid), Tools Pending.
+**Status:** Editor Functional, Input Arbitration Robust, Coordinate Systems Aligned.
 
 ## 1. Executive Summary
-We have successfully replaced the legacy `LevelEditor.js` with a new, robust `EditorSystem.js` designed for the "Infinite Grid" architecture. The new system supports non-blocking UI, proper viewport panning (including "void panning"), and a refactored serialization pipeline that respects the `TileMap` data structure.
+We have successfully implemented a **Rigid Input Arbitration** system to manage the transition between `PLAY` and `EDIT` modes. This resolves previous issues where input states (dragging, aiming) could leak between modes, causing "stuck" shots or accidental painting. `Game.js` now acts as the central arbiter, enforcing mutual exclusivity between `Input.js` (Game) and `EditorSystem.js` (Editor).
 
 ## 2. Completed Work
 
-### A. Editor Core (`src/editor/EditorSystem.js`)
-- **State Management**: Implemented `enable()` and `disable()` methods to toggle `game.editorMode`.
-- **Input Handling**:
-    - Independent WASD/Arrow Key navigation.
-    - `Shift` for speed boost.
-    - **Void Panning**: Camera is NOT clamped to world bounds in Editor Mode, allowing exploration of the infinite grid.
-- **Grid Rendering**:
-    - Implemented a 60x60 grid overlay.
-    - **Culling**: strictly draws only visible lines based on `Viewport` bounds.
-    - **Correction**: Fixed a critical bug where the grid was too dense by correctly using `viewport.gridToScreen()` and accounting for the Viewport's **Center-based** coordinate system.
+### A. Rigid State Machine (`src/core/Game.js`)
+- **Central Authority**: Implemented `setMode(mode)` where `mode` is strictly `'PLAY'` or `'EDIT'`.
+- **Arbitration Logic**:
+    - **EDIT Mode**: Disables `Input.js`, Enables `EditorSystem`.
+    - **PLAY Mode**: Disables `EditorSystem`, Enables `Input.js`.
+- **Toggle**: Added `toggleEditor()` convenience method used by the UI.
 
-### B. Serialization (`src/editor/LevelSerializer.js`)
-- **Refactored**: Now iterates the `TileMap` (sparse dictionary) to serialize static geometry (Walls, Hazards, Holes).
-- **Metadata**: Added support for `wind` (angle, speed) and `par`.
-- **Entities**: Handles `start`, `slopes`, and generic entities.
-- **Workflow**:
-    - `exportLevel()`: Generates `RP1:...` code and copies to clipboard.
-    - `importLevel()`: Accepts code via prompt and reloads the level immediately.
+### B. Input Safety (`src/input/Input.js`)
+- **Enable/Disable**: Added explicit methods to control input processing.
+- **State Clearing**: `disable()` now strictly resets `isDragging` and drag vectors. This prevents the ball from "sticking" to the cursor if the user switches to Editor mode mid-drag.
+- **Power Tweak**: Reduced `powerScale` from `0.15` to `0.10` for better control.
 
-### C. UI & Integration
-- **`src/editor/EditorUI.js`**: Created a non-blocking DOM overlay (`#editor-hud`) with "Export", "Import", and "Settings" buttons.
-- **`src/core/Game.js`**:
-    - Added `editorMode` flag.
-    - **Loop Separation**: Skips `physics.update` when editing; calls `editorSystem.update` instead.
-    - **Render Loop**: Calls `editorSystem.draw` after the main scene.
-- **`src/main.js`**: Replaced legacy editor instantiation with `EditorSystem`.
+### C. Editor Cleanup (`src/editor/EditorSystem.js`, `src/editor/PointerInput.js`)
+- **Reset on Exit**: `EditorSystem.disable()` now:
+    - Resets the active tool to `HAND`.
+    - Calls `pointerInput.reset()` to clear all active touch points and panning/zooming state.
+- **Pointer Safety**: `PointerInput.reset()` ensures no "ghost touches" persist if the editor is closed while fingers are down.
 
-## 3. Challenges & Pitfalls Encountered
+## 3. Challenges & Troubleshooting
 
-### A. Coordinate System Mismatch
-**Issue**: The Editor Grid initially rendered incorrectly (too dense).
-**Cause**: The `EditorSystem` assumed `Viewport.x/y` represented the **Top-Left** of the screen.
-**Reality**: `Viewport.x/y` represents the **Center** of the camera in World Space.
-**Fix**: Updated `drawGrid` to calculate bounds using `vp.x - halfWidth` and utilized `vp.gridToScreen()` for all transformations.
-**Lesson**: Always verify the coordinate system of the `Viewport` class before implementing rendering logic.
+### A. The "Early Constructor Close" Bug
+**Issue**: A `TypeError: Cannot set properties of undefined (setting 'isMoving')` occurred in `EditorSystem`.
+**Cause**: During the refactor of `Game.js`, the `constructor` closing brace `}` was accidentally placed *before* the initialization of `this.ball`. This meant `this.ball` was undefined when the Editor tried to access it.
+**Fix**: Restructured `Game.js` to ensure all properties are initialized before the constructor closes.
 
-### B. Accidental Deletion of Core Methods
-**Issue**: During the integration of `editorMode` into `Game.js`, the `init()`, `loadLevel()`, and other core methods were accidentally deleted, causing a crash (`this.init is not a function`).
-**Fix**: Manually restored the missing methods.
-**Lesson**: Be extremely careful when performing large edits on the "God Class" (`Game.js`). Use `view_file` to verify context before and after edits.
+### B. The "Method in Constructor" Syntax Error
+**Issue**: A `SyntaxError: Unexpected token '{'` occurred in `Game.js`.
+**Cause**: In fixing the previous bug, `setMode` and `toggleEditor` were accidentally defined *inside* the `constructor`.
+**Fix**: Moved these methods out of the constructor and into the class body, properly separating initialization logic (`init()`) from class methods.
 
-### C. Dependency Injection
-**Issue**: `EditorSystem` needs access to `Game`, but `Game` needs to call `EditorSystem`.
-**Solution**: Instantiated `EditorSystem` in `main.js` passing the `game` instance, then attached it back to `game.editorSystem`.
+## 4. Current State & Next Steps
 
-## 4. Shortfalls & Next Steps
+### A. Known Gaps
+- **Missing Editor Tools**: `HOLE`, `START`, and `SLOPE` tools are defined in `TOOLS` but logic is missing in `EditorSystem`.
+- **Level Management**: Export/Import UI exists, but backend logic in `LevelSerializer` needs verification against the new `TileMap` structure.
 
-### A. Missing Tools (Critical)
-The Editor currently allows **Viewing**, **Panning**, **Exporting**, and **Importing**. It does **NOT** yet allow placing or removing tiles.
-- **Next Task**: Implement `Brush` logic (Paint Wall, Paint Sand, Erase).
-- **Next Task**: Implement `Entity Placer` (Place Hole, Start, Slopes).
+### B. Critical Files
+- `src/core/Game.js`: The State Machine Arbiter.
+- `src/input/Input.js`: Handles Game Input (Putt).
+- `src/editor/EditorSystem.js`: Handles Editor State.
+- `src/editor/PointerInput.js`: Handles Editor Input (Paint/Pan/Zoom).
 
-### B. UI Polish
-- **Import Prompt**: Currently uses `window.prompt()`, which blocks the thread. Needs a proper Modal.
-- **Settings**: The "Settings" button in the Editor HUD is non-functional.
-
-### C. Entity Management
-- Serialization of dynamic entities relies on `currentLevel.entities`. We may need a more robust `EntityManager` to handle creation/deletion of entities during runtime editing.
-
-## 5. Key Files
-- `src/editor/EditorSystem.js`: Core logic.
-- `src/editor/LevelSerializer.js`: Data handling.
-- `src/editor/EditorUI.js`: DOM Overlay.
-- `src/core/Game.js`: Main loop integration.
-- `src/core/Viewport.js`: Coordinate transformations.
+### C. Coordinate System Reminder
+- **Do NOT touch the coordinate math in `PointerInput.js`**. It correctly handles the `30, 60` Renderer viewport offset and Canvas scaling.

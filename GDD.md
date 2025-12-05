@@ -1,4 +1,4 @@
-# Retro Putt: Green Pocket - Game Design Document (v2.0)
+# Retro Putt: Green Pocket - Game Design Document (v3.1)
 
 ## 1. Project Overview
 * **Concept**: Top-down, 2D golf physics puzzle game where "simulation physics" meets "Game Boy aesthetics."
@@ -27,80 +27,94 @@
     * *Tiers*: Gentle (0.05), Moderate (0.1), Steep (0.15).
 * **Wind**: Defined as AABB zones.
     * **Scalar Rule**: Wind force is dampened by a `0.03` scalar to create a "drifting" breeze rather than a jet engine boost.
-    * **Terminal Velocity**: Drag vs. Wind naturally creates a top speed cap.
 
 ### 2.3 Hole Interaction (Rim Physics)
-The hole is not a binary trigger. It has three distinct zones based on distance and speed:
+The hole is not a binary trigger. It has three distinct zones:
 1.  **Capture Zone** (Center + Slow): Ball drops in. Success.
 2.  **Rim Zone** (Edge + Fast):
-    * *Visual*: Ball deflects sharply towards center (Orbital curve).
-    * *Physics*: Velocity dampened by `0.9` (Impact energy loss).
-    * *Audio*: "Tock" sound (Lip-out).
-    * *Result*: Ball rattles and likely pops out unless angle is perfect.
+    * *Physics*: Velocity dampened by `0.9`, deflected towards center.
+    * *Result*: Ball rattles and pops out unless angle/speed are perfect.
 3.  **Ignore Zone** (Far): No effect.
 
-### 2.4 Aiming Systems
-* **Basic Aim (Default)**:
-    * A static, dashed line showing **Launch Power** only.
-    * Ignores Wind, Slopes, and Drag.
-* **Predictive Chip (Consumable Power-Up)**:
-    * **Activation**: Toggle via 'P' key or UI. Charge consumed on `STROKE_TAKEN`.
-    * **Simulation**: Runs a 180-frame "Dry Run" of the physics engine.
-    * **Visuals**: "Breadcrumbs" (dots) that show the true curved path, plus a "Ghost Ball" at the resting coordinates.
-    * **Animation**: "Retro Marquee" effect (dots flash in a traveling wave).
+## 3. Architecture & Input Logic (CRITICAL)
+**Constraint:** This project uses a strict **State Machine** to arbitrate between Gameplay and Editing.
 
-## 3. Architecture & Data
-### 3.1 Event-Driven Core
+### 3.1 The State Machine (Arbiter)
+Managed by `src/core/Game.js`.
+* **Modes**: Mutually exclusive `PLAY` and `EDIT`.
+* **Initialization**: Game starts in `LOADING` mode. `init()` must explicitly call `setMode('PLAY')` to trigger the transition.
+* **Behavior**:
+    * **Switching to PLAY**: Calls `editorSystem.disable()` (removes DOM overlays) -> Calls `input.enable()`.
+    * **Switching to EDIT**: Calls `input.disable()` -> Calls `editorSystem.enable()` (activates DOM overlays).
+
+### 3.2 Input Stratification (The "Lazy Load" Pattern)
+To prevent Event Bubbling conflicts and "Dead Input," we separate listeners by layer and lifecycle.
+
+* **Game Input (`Input.js`)**:
+    * **Target**: `window` (Allows dragging outside canvas bounds).
+    * **Lifecycle**: Listeners are attached once. State is managed via an `enabled` flag.
+    * **Constraint**: `onStart` coordinates must **NOT** be clamped to 0-600. Valid drags may originate in the margin due to Camera Offsets.
+
+* **Editor Input (`PointerInput.js`)**:
+    * **Target**: `canvas` (Captures specific tile clicks).
+    * **Lifecycle (Explicit Attach/Detach)**:
+        * **Constructor**: Does **NOT** attach listeners.
+        * **Attach**: Called only when `EditorSystem.enable()` runs.
+        * **Detach**: Called immediately when `EditorSystem.disable()` runs.
+    * **Reasoning**: If attached permanently, `PointerInput` calls `preventDefault()` on the canvas, swallowing events before they bubble to the Game Input.
+
+### 3.3 Safe Initialization ("Armored Boot")
+`Game.js` must be resilient to DOM timing issues.
+* **UI Updates**: Any call to `updateUI` (setting text content) must check if the DOM element exists (`if (this.uiPar) ...`).
+* **Failure State**: Unchecked DOM access causes silent constructor crashes, preventing the State Machine from booting.
+
+### 3.4 Event-Driven Core
 Systems are decoupled via a global `EventBus`.
-* `STROKE_TAKEN`: Input released -> Increment strokes, Inventory consumes 'Prediction Chip', Lock Input.
-* `HOLE_LIP`: Collision detected -> Play "Rim Rattle", Emit Particles.
-* `BALL_STOPPED`: Threshold met -> Unlock input, Camera re-centers.
+* `STROKE_TAKEN`: Input released -> Increment strokes.
+* `HOLE_LIP`: Collision detected -> Play "Rim Rattle".
+* `BALL_STOPPED`: Threshold met -> Unlock input.
 
-### 3.2 PlayerState (The Bank)
+## 4. Data & Serialization
+### 4.1 PlayerState (The Bank)
 A Singleton class managing persistent data (`localStorage: retro-putt-profile`).
 * **Inventory**: Tracks consumables (e.g., `{ prediction: 5 }`).
-* **Currency**: Coins collected during gameplay.
-* **Progress**: Stars earned per level (Max 3 stars based on PAR).
-* **Unlock State**: Which courses are available.
+* **Currency**: Coins collected.
 
-### 3.3 The Camera (Clamped Follow)
+### 4.2 The Camera (Clamped Follow)
 * **Dead Zone**: The 60px difference between Logical World (600) and Viewport (540).
-* **Behavior**: Camera strictly follows the ball but clamps to `(0, 600)`, ensuring no "black void" is ever seen outside level bounds.
+* **Behavior**: Camera strictly follows the ball but clamps to `(0, 600)`.
 
-### 3.4 Level Serialization ("Share Codes")
-* **Format**: Base64 encoded JSON with a version prefix (`RP1:`).
-* **Compression**: Coordinates are divided by 60 (Grid Size) to save space.
-* **Usage**: Used for Level Editor export/import and defining Campaign levels in `Levels.js`.
-
-## 4. UI & Polish
-* **Ribbon UI**: HTML overlays (`z-index: 20`) frame the canvas (Top: Stats, Bottom: Navigation).
-* **Modals**: Slide-up HTML panels for Settings and Course Selection.
-* **Audio**:
-    * **Dynamic Mixing**: 5-channel bus (`sfx`, `ambience`, `music`, `ui`, `master`).
-    * **Feedback**: UI elements "Blip" or "Click" on interaction.
-* **Juice**:
-    * **Particles**: Grass divots on stop, sparkles on hole-in.
-    * **Screen Shake**: Subtlety applied on Wall Hits (Directional).
+### 4.3 Level Serialization
+* **Format**: Base64 encoded JSON (`RP1:` prefix).
+* **Compression**: Coordinates divided by 60 (Grid Size).
 
 ## 5. Content Roadmap
-### 5.1 The Level Editor (Priority: High)
-* **Goal**: Move away from code-based level definitions.
-* **Features**:
-    * Grid-Snapping (60px).
-    * "Paint" terrain types (Wall, Sand, Water).
-    * Place Entities (Hole, Start, Slopes, Wind).
-    * **Serialization**: Export/Import via "Share Codes".
+### 5.1 The Level Editor (Status: Functional)
+* **Current Capabilities**: Navigation (Pan/Zoom), Painting (Wall/Sand).
+* **Missing Tools**: Logic for `HOLE`, `START`, and `SLOPE` placement needs to be implemented in `EditorSystem.js`.
 
-### 5.2 The "Pro Shop" (Priority: Medium)
-* **Concept**: A new Modal tab.
-* **Exchange**: Spend earned **Coins** or **Stars**.
-* **Goods**:
-    * Refill "Predictive Chips."
-    * Unlock "Ball Skins" (e.g., 8-ball, Cube, Eyeball).
-
-### 5.3 Campaign Structure
+### 5.2 Campaign Structure
 * **Target**: 18 Levels total.
-* **Progression**:
-    * **Course 1 (The Green)**: Levels 1-6 (Basics).
-    * **Course 2 (The Dunes)**: Levels 7-12 (Sand & Wind focus).
-    * **Course 3 (The Peak)**: Levels 13-18 (Slopes & Precision focus).
+    * **Course 1**: Basics.
+    * **Course 2**: Sand & Wind.
+    * **Course 3**: Slopes.
+
+## 6. Persistence System (Editor Saves)
+### 6.1 Data Structure (Manifest Pattern)
+* **Storage**: `localStorage`.
+* **Manifest Key**: `rp_editor_manifest`. Stores metadata only (ID, Name, Date).
+* **Data Key**: `rp_level_{UUID}`. Stores the actual Base64 string.
+* **Constraint**: Separating manifest from data ensures fast loading of the file list.
+
+### 6.2 The "Dirty" State
+* **Tracker**: `EditorSystem.isDirty` (Boolean).
+* **Trigger**: Set to `true` on any `PAINT`, `PLACE`, or `ERASE` action.
+* **Reset**: Set to `false` only after `saveLevel()` completes successfully.
+* **Guard**: Attempting to `EXIT`, `LOAD`, or `NEW` while `isDirty === true` triggers a blocking "Save or Discard?" modal.
+
+### 6.3 UI/UX Design
+* **Modals**: Custom HTML Overlays (No native `alert/prompt`).
+* **Input**: HTML `<input type="text">` with `maxlength="24"`.
+* **List**: Scrollable `<ul>` container.
+    * *Item*: Name (Left), Date (Right, formatted "MM/DD HH:MM").
+    * *Actions*: Load (Click Body), Delete (Trash Icon).

@@ -4,17 +4,32 @@ export class Input {
     constructor(canvas, ball, audioController) {
         this.canvas = canvas;
         this.ball = ball;
-        this.audioController = audioController;
+        this.audioController = audioController; // Store the audio controller
         this.isDragging = false;
         this.dragStart = { x: 0, y: 0 };
         this.dragCurrent = { x: 0, y: 0 };
-        this.maxPower = 150; // Max drag distance
-        this.powerScale = 0.15; // Multiplier for velocity
+        this.maxPower = 200; // Max drag distance
+        this.powerScale = 0.05; // Multiplier for velocity
 
         this.cameraX = 0;
         this.cameraY = 0;
 
+        this.enabled = true;
+
         this.setupListeners();
+    }
+
+    enable() {
+        this.enabled = true;
+        console.log('Input Enabled');
+    }
+
+    disable() {
+        this.enabled = false;
+        this.isDragging = false;
+        this.dragStart = { x: 0, y: 0 };
+        this.dragCurrent = { x: 0, y: 0 };
+        console.log('Input Disabled');
     }
 
     setCamera(x, y) {
@@ -24,13 +39,14 @@ export class Input {
 
     setupListeners() {
         // Listen on window to catch clicks on ribbons/margins
+        // We bind 'this' so the methods can access class properties
         window.addEventListener('mousedown', this.onStart.bind(this));
         window.addEventListener('mousemove', this.onMove.bind(this));
         window.addEventListener('mouseup', this.onEnd.bind(this));
 
         window.addEventListener('touchstart', (e) => {
             if (e.target.tagName !== 'BUTTON') {
-                e.preventDefault(); // Prevent scrolling unless hitting a button
+                e.preventDefault();
             }
             this.onStart(e.touches[0], e);
         }, { passive: false });
@@ -44,10 +60,16 @@ export class Input {
     }
 
     onStart(e, originalEvent) {
+        // Log diagnostics to verify inputs are detected
+        console.log('[Input] Click Detected:', { x: e.clientX, y: e.clientY, enabled: this.enabled });
+
+        if (!this.enabled) return;
+
         // Ignore clicks on buttons
         const target = originalEvent ? originalEvent.target : e.target;
         if (target && (target.tagName === 'BUTTON' || target.closest('button'))) return;
 
+        // Resume Audio Context on first interaction
         if (this.audioController) {
             this.audioController.resume();
         }
@@ -69,9 +91,7 @@ export class Input {
         x += this.cameraX;
         y += this.cameraY;
 
-        // Clamp to logical world (0-600)
-        x = Math.max(0, Math.min(x, 600));
-        y = Math.max(0, Math.min(y, 600));
+        // NOTE: Clamping removed here to allow drags starting slightly off-grid
 
         // Check if clicking near ball (allow some tolerance)
         const dx = x - this.ball.x;
@@ -102,10 +122,6 @@ export class Input {
         // ADD CAMERA OFFSET
         x += this.cameraX;
         y += this.cameraY;
-
-        // Clamp to logical world 12/03/2025 REMOVED BY USER
-        // x = Math.max(0, Math.min(x, 600));
-        // y = Math.max(0, Math.min(y, 600));
 
         this.dragCurrent = { x, y };
     }

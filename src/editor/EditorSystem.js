@@ -1,5 +1,7 @@
 import { LevelSerializer } from './LevelSerializer.js';
 import { EditorUI } from './EditorUI.js';
+import { TOOLS } from './EditorTools.js';
+import { PointerInput } from './PointerInput.js';
 
 export class EditorSystem {
     constructor(game) {
@@ -16,6 +18,10 @@ export class EditorSystem {
 
         // UI Component
         this.ui = new EditorUI(this);
+        this.pointerInput = new PointerInput(this);
+
+        this.currentTool = TOOLS.HAND;
+        this.tools = TOOLS;
 
         // Bindings
         this.handleKeyDown = this.handleKeyDown.bind(this);
@@ -51,12 +57,21 @@ export class EditorSystem {
         window.addEventListener('keydown', this.handleKeyDown);
         window.addEventListener('keyup', this.handleKeyUp);
 
+        // Attach Input
+        window.addEventListener('keydown', this.handleKeyDown);
+        window.addEventListener('keyup', this.handleKeyUp);
+        this.pointerInput.attach();
+
         console.log("Editor Enabled");
     }
 
     disable() {
         if (!this.enabled) return;
         this.enabled = false;
+        // game.editorMode is now handled by Game.setMode, but we can keep this for safety or remove it if we strictly follow the arbiter pattern. 
+        // The user request says "Game.js (The Arbiter)... On Switch to PLAY: this.editorSystem.disable()".
+        // It doesn't explicitly say we MUST remove this line, but it's cleaner if Game manages the flag.
+        // However, existing code sets it here. Let's leave it to ensure consistency if called directly.
         this.game.editorMode = false;
 
         // Hide UI
@@ -68,6 +83,13 @@ export class EditorSystem {
 
         // Reset Keys
         for (let key in this.keys) this.keys[key] = false;
+
+        // Cleanup
+        this.currentTool = this.tools.HAND;
+        // Cleanup
+        this.currentTool = this.tools.HAND;
+        this.pointerInput.detach();
+        this.pointerInput.reset();
 
         console.log("Editor Disabled");
     }
@@ -99,6 +121,11 @@ export class EditorSystem {
 
         // Draw Grid Overlay
         this.drawGrid(ctx);
+
+        // Draw Ghost Tile (if not Hand tool)
+        if (this.currentTool !== TOOLS.HAND) {
+            this.drawGhost(ctx);
+        }
     }
 
     drawGrid(ctx) {
@@ -148,18 +175,49 @@ export class EditorSystem {
 
         ctx.restore();
     }
+    setTool(tool) {
+        this.currentTool = tool;
+        console.log('Tool set to:', tool);
+    }
+
+    drawGhost(ctx) {
+        const pointers = this.pointerInput.activePointers;
+        if (pointers.size === 1) {
+            const p = pointers.values().next().value;
+            const vp = this.game.viewport;
+            const rect = this.game.canvas.getBoundingClientRect();
+
+            // Scale mouse coordinates to match canvas logical resolution
+            const scaleX = this.game.canvas.width / rect.width;
+            const scaleY = this.game.canvas.height / rect.height;
+
+            const canvasX = (p.x - rect.left) * scaleX;
+            const canvasY = (p.y - rect.top) * scaleY;
+
+            // Apply Renderer Viewport Offset
+            const viewX = canvasX - this.game.renderer.VIEWPORT_X;
+            const viewY = canvasY - this.game.renderer.VIEWPORT_Y;
+
+            const gridPos = vp.screenToGrid(viewX, viewY);
+            const col = Math.floor(gridPos.col);
+            const row = Math.floor(gridPos.row);
+
+            const screenPos = vp.gridToScreen(col, row);
+            const size = 60 * vp.zoom;
+
+            ctx.save();
+            ctx.fillStyle = '#9bbc0f';
+            ctx.globalAlpha = 0.5;
+            ctx.fillRect(screenPos.x, screenPos.y, size, size);
+            ctx.restore();
+        }
+    }
 
     // --- Actions ---
 
     exportLevel() {
         // Gather Data
         const tileMap = this.game.tileMap;
-
-        // We need to reconstruct the 'entities' list from the game state
-        // Currently, Game.js loads entities into 'level.entities'
-        // But we also need to include Slopes and Start Position if they aren't in entities
-
-        const currentLevel = this.game.levelManager.getCurrentLevel();
 
         // Combine all non-grid entities
         let entities = [];

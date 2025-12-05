@@ -1,7 +1,10 @@
+import { TOOLS } from './EditorTools.js';
+
 export class EditorUI {
     constructor(editorSystem) {
         this.editor = editorSystem;
         this.container = null;
+        this.buttons = {}; // Map tool -> button element
         this.init();
     }
 
@@ -14,12 +17,12 @@ export class EditorUI {
         this.container.style.left = '0';
         this.container.style.width = '100%';
         this.container.style.height = '100%';
-        this.container.style.pointerEvents = 'none'; // Let clicks pass through to canvas by default
-        this.container.style.zIndex = '20';
+        this.container.style.pointerEvents = 'none';
+        this.container.style.zIndex = '100';
         this.container.style.display = 'none';
         this.container.style.fontFamily = '"Press Start 2P", cursive';
 
-        // Top Bar
+        // --- Top Bar ---
         const topBar = document.createElement('div');
         topBar.style.position = 'absolute';
         topBar.style.top = '10px';
@@ -27,7 +30,7 @@ export class EditorUI {
         topBar.style.right = '10px';
         topBar.style.display = 'flex';
         topBar.style.justifyContent = 'space-between';
-        topBar.style.pointerEvents = 'auto'; // Enable clicks on the bar
+        topBar.style.pointerEvents = 'auto';
 
         // Left: Title
         const title = document.createElement('div');
@@ -43,7 +46,6 @@ export class EditorUI {
         actions.style.display = 'flex';
         actions.style.gap = '10px';
 
-        // Export Button
         const exportBtn = this.createButton('EXPORT', () => {
             const code = this.editor.exportLevel();
             navigator.clipboard.writeText(code).then(() => {
@@ -51,10 +53,7 @@ export class EditorUI {
             });
         });
 
-        // Import Button
         const importBtn = this.createButton('IMPORT', () => {
-            // Simple prompt for now, can be improved to a modal later
-            // We use a timeout to ensure we don't block the UI thread immediately on click
             setTimeout(() => {
                 const code = prompt("Paste Level Code (RP1:...):");
                 if (code) {
@@ -67,7 +66,6 @@ export class EditorUI {
             }, 10);
         });
 
-        // Settings Button (Gear)
         const settingsBtn = this.createButton('⚙️', () => {
             this.showToast('Settings: Coming Soon');
         });
@@ -79,10 +77,32 @@ export class EditorUI {
 
         this.container.appendChild(topBar);
 
-        // Toast Notification Area
+        // --- Bottom Toolbar ---
+        const toolbar = document.createElement('div');
+        toolbar.style.position = 'absolute';
+        toolbar.style.bottom = '90px';
+        toolbar.style.left = '50%';
+        toolbar.style.transform = 'translateX(-50%)';
+        toolbar.style.display = 'flex';
+        toolbar.style.gap = '10px';
+        toolbar.style.pointerEvents = 'auto';
+        toolbar.style.backgroundColor = '#0f380f';
+        toolbar.style.padding = '10px';
+        toolbar.style.border = '2px solid #9bbc0f';
+        toolbar.style.borderRadius = '8px';
+
+        // Tools
+        this.createToolButton(toolbar, TOOLS.HAND, '✋');
+        this.createToolButton(toolbar, TOOLS.WALL, '🧱');
+        this.createToolButton(toolbar, TOOLS.SAND, '🏜️');
+        this.createToolButton(toolbar, TOOLS.ERASER, '🧼');
+
+        this.container.appendChild(toolbar);
+
+        // --- Toast ---
         this.toast = document.createElement('div');
         this.toast.style.position = 'absolute';
-        this.toast.style.bottom = '80px'; // Above the ribbon
+        this.toast.style.bottom = '100px'; // Above the toolbar
         this.toast.style.left = '50%';
         this.toast.style.transform = 'translateX(-50%)';
         this.toast.style.backgroundColor = '#0f380f';
@@ -94,11 +114,11 @@ export class EditorUI {
 
         document.body.appendChild(this.container);
 
-        // Stop Propagation on Container to prevent Canvas interaction
-        // Actually, we set pointer-events: none on container, and auto on children.
-        // But we want to make sure clicks on buttons don't fire game inputs.
+        // Stop Propagation
         topBar.addEventListener('mousedown', (e) => e.stopPropagation());
         topBar.addEventListener('touchstart', (e) => e.stopPropagation());
+        toolbar.addEventListener('mousedown', (e) => e.stopPropagation());
+        toolbar.addEventListener('touchstart', (e) => e.stopPropagation());
     }
 
     createButton(text, onClick) {
@@ -122,6 +142,47 @@ export class EditorUI {
         btn.addEventListener('click', onClick);
 
         return btn;
+    }
+
+    createToolButton(parent, tool, icon) {
+        const btn = document.createElement('button');
+        btn.textContent = icon;
+        btn.style.width = '44px';
+        btn.style.height = '44px';
+        btn.style.backgroundColor = '#8bac0f';
+        btn.style.color = '#0f380f';
+        btn.style.border = '2px solid #0f380f';
+        btn.style.fontFamily = 'inherit';
+        btn.style.cursor = 'pointer';
+        btn.style.fontSize = '20px';
+        btn.style.display = 'flex';
+        btn.style.alignItems = 'center';
+        btn.style.justifyContent = 'center';
+
+        btn.addEventListener('click', () => {
+            this.editor.setTool(tool);
+            this.updateActiveTool(tool);
+        });
+
+        parent.appendChild(btn);
+        this.buttons[tool] = btn;
+
+        // Set initial active state
+        if (tool === this.editor.currentTool) {
+            this.updateActiveTool(tool);
+        }
+    }
+
+    updateActiveTool(activeTool) {
+        for (const [tool, btn] of Object.entries(this.buttons)) {
+            if (tool === activeTool) {
+                btn.style.backgroundColor = '#9bbc0f'; // Highlight
+                btn.style.border = '2px solid #fff'; // White border for contrast
+            } else {
+                btn.style.backgroundColor = '#8bac0f';
+                btn.style.border = '2px solid #0f380f';
+            }
+        }
     }
 
     show() {
