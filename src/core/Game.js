@@ -6,6 +6,8 @@ import { LevelManager } from '../levels/LevelManager.js';
 import { AudioController } from '../audio/Audio.js';
 import { ParticleSystem } from '../graphics/Particles.js';
 import { PlayerState } from './PlayerState.js';
+import { Viewport } from './Viewport.js';
+import { TileMap } from './TileMap.js';
 
 export class Game {
     constructor() {
@@ -22,13 +24,27 @@ export class Game {
         this.isRunning = false;
 
         this.physics = new Physics();
-        this.renderer = new Renderer(this.ctx);
+
+        // Initialize Core Systems
+        this.viewport = new Viewport(540, 540);
+        this.tileMap = new TileMap();
+
+        // Hardcode Dummy Data (Hello World)
+        this.tileMap.setTile(0, 0, 'WALL');
+        this.tileMap.setTile(5, 5, 'HOLE');
+        this.tileMap.setTile(2, 2, 'SAND');
+        this.tileMap.setTile(1, 1, 'WALL');
+        this.tileMap.setTile(8, 8, 'WALL'); // Test bounds
+
+        this.renderer = new Renderer(this.ctx, this.viewport);
         this.levelManager = new LevelManager();
         this.audio = new AudioController();
         this.particles = new ParticleSystem();
         this.playerState = new PlayerState();
 
         this.isUsingPrediction = false;
+        this.debugMode = false;
+        this.showWindArrows = false;
 
         this.ball = {
             x: 0, y: 0,
@@ -129,8 +145,17 @@ export class Game {
 
         // Debug toggles (optional, for dev)
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'd') this.debugMode = !this.debugMode;
-            if (e.key === 'w') this.showWindArrows = !this.showWindArrows;
+            if (e.key.toLowerCase() === 'd') {
+                this.debugMode = !this.debugMode;
+                console.log(`Debug Mode: ${this.debugMode}`);
+            }
+            if (e.key.toLowerCase() === 'w') this.showWindArrows = !this.showWindArrows;
+
+            // Zoom Controls
+            if (e.key === '=' || e.key === '+') this.viewport.setZoom(this.viewport.zoom + 0.1);
+            if (e.key === '-') this.viewport.setZoom(this.viewport.zoom - 0.1);
+            if (e.key === '0') this.viewport.setZoom(1.0);
+
             if (e.key === 'p' || e.key === 'P') {
                 if (this.isUsingPrediction) {
                     this.isUsingPrediction = false;
@@ -244,197 +269,7 @@ export class Game {
         requestAnimationFrame(this.loop.bind(this));
     }
 
-    loop(timestamp) {
-        if (!this.isRunning) return;
 
-
-        eventBus.on('HOLE_REACHED', () => {
-            this.audio.playHole();
-            this.particles.emit(this.ball.x, this.ball.y, '#306230', 20, 3); // Dark burst on hole
-            setTimeout(() => {
-                this.nextLevel();
-            }, 2000);
-        });
-
-        eventBus.on('BALL_STOPPED', () => {
-            // Re-enable input (handled by Input class checking isMoving)
-        });
-
-        eventBus.on('WALL_HIT', (data) => {
-            this.particles.emit(data.x, data.y, '#0f380f', 5, 3); // Darkest particles on wall hit
-            this.audio.playWallHit();
-            this.renderer.shake(10); // Shake screen
-        });
-
-        eventBus.on('SAND_ENTER', (data) => {
-            if (Math.random() > 0.8) { // Don't spam particles
-                this.particles.emit(data.x, data.y, '#306230', 2, 1); // Sand particles
-            }
-        });
-
-        eventBus.on('BOOST_ACTIVATED', (entity) => {
-            this.particles.emit(entity.x + entity.width / 2, entity.y + entity.height / 2, '#9bbc0f', 15, 8);
-            // TODO: Add Boost SFX
-        });
-
-        eventBus.on('SWITCH_TRIGGERED', (switchEntity) => {
-            this.renderer.shake(5);
-            // Find target gate
-            const level = this.levelManager.getCurrentLevel();
-            if (level && level.entities) {
-                const gate = level.entities.find(e => e.id === switchEntity.targetId);
-                if (gate) {
-                    gate.open = true;
-                    // Optional: Close after delay
-                    if (switchEntity.timeout) {
-                        setTimeout(() => {
-                            gate.open = false;
-                            switchEntity.active = false;
-                        }, switchEntity.timeout);
-                    }
-                }
-            }
-        });
-
-        eventBus.on('WIND_ZONES_ACTIVE', (zones) => {
-            this.renderer.initWindEmitters(zones);
-            this.audio.setWind(zones);
-        });
-
-        // Debug toggles (optional, for dev)
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'd') this.debugMode = !this.debugMode;
-            if (e.key === 'w') this.showWindArrows = !this.showWindArrows;
-        });
-
-        // Debug Level Select
-        const levelSelect = document.getElementById('level-select');
-        console.log("Debug: levelSelect found?", levelSelect);
-        console.log("Debug: Levels available:", this.levelManager.levels.length);
-
-        if (levelSelect) {
-            this.levelManager.levels.forEach((level, index) => {
-                const option = document.createElement('option');
-                option.value = index;
-                option.text = `Level ${index + 1}`;
-                levelSelect.appendChild(option);
-            });
-
-            levelSelect.addEventListener('change', (e) => {
-                this.levelManager.currentLevelIndex = parseInt(e.target.value);
-                this.renderer.resetWindEmitters();
-                this.audio.setWind([]);
-                this.loadLevel();
-                // Remove focus so keyboard controls still work
-                e.target.blur();
-            });
-        }
-
-        // Resume Audio Context on first interaction
-        const resumeAudio = () => {
-            this.audio.resume();
-            window.removeEventListener('mousedown', resumeAudio);
-            window.removeEventListener('keydown', resumeAudio);
-        };
-        window.addEventListener('mousedown', resumeAudio);
-        window.addEventListener('keydown', resumeAudio);
-
-        this.start();
-    }
-
-    loadLevel() {
-        const level = this.levelManager.getCurrentLevel();
-        if (!level) {
-            this.showEndScreen();
-            return;
-        }
-
-        this.ball.x = level.start.x;
-        this.ball.y = level.start.y;
-        this.ball.vx = 0;
-        this.ball.vy = 0;
-        this.ball.isMoving = false;
-
-        // Reset Entity State (Movers, Switches, Boosts)
-        if (level.entities) {
-            for (const entity of level.entities) {
-                if (entity.type === 'mover') {
-                    // Reset position if needed, though update loop handles it
-                }
-                if (entity.type === 'switch') entity.active = false;
-                if (entity.type === 'gate') entity.open = false;
-                if (entity.type === 'boost') entity.cooldown = 0;
-            }
-        }
-
-        this.strokes = 0;
-        this.updateUI();
-
-        // Check for wind zones
-        const windZones = this.levelManager.getWindZones();
-        if (windZones.length > 0) {
-            eventBus.emit('WIND_ZONES_ACTIVE', windZones);
-        } else {
-            this.renderer.resetWindEmitters();
-            this.audio.setWind([]);
-        }
-
-        // Update Level Indicator
-        const levelIndicator = document.getElementById('level-indicator');
-        if (levelIndicator) {
-            if (this.levelManager.overrideLevel) {
-                levelIndicator.textContent = "TEST CHAMBER";
-            } else {
-                levelIndicator.textContent = `LEVEL ${this.levelManager.currentLevelIndex + 1}`;
-            }
-        }
-    }
-
-    nextLevel() {
-        const level = this.levelManager.getCurrentLevel();
-        this.totalStrokes += this.strokes;
-        this.totalPar += level.par;
-        this.totalStars += this.levelManager.getStarRating(this.strokes, level.par);
-
-        const next = this.levelManager.nextLevel();
-        if (next) {
-            this.renderer.resetWindEmitters(); // Clear particles
-            this.audio.setWind([]);
-            this.loadLevel();
-        } else {
-            this.showEndScreen();
-        }
-    }
-
-    updateUI() {
-        const level = this.levelManager.getCurrentLevel();
-        if (level) {
-            this.uiPar.textContent = level.par;
-            this.uiStrokes.textContent = this.strokes;
-        }
-    }
-
-    showEndScreen() {
-        this.isRunning = false;
-        this.renderer.clear();
-        this.ctx.fillStyle = '#0f380f';
-        this.ctx.font = '30px "Press Start 2P"';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText("COURSE COMPLETED", 300, 250);
-        this.ctx.font = '20px "Press Start 2P"';
-        this.ctx.fillText(`TOTAL STROKES: ${this.totalStrokes}`, 300, 300);
-        this.ctx.fillText(`TOTAL PAR: ${this.totalPar}`, 300, 350);
-        this.ctx.fillText(`STARS: ${this.totalStars} / ${this.levelManager.levels.length * 3}`, 300, 400);
-
-        this.audio.playWin();
-    }
-
-    start() {
-        if (this.isRunning) return;
-        this.isRunning = true;
-        this.lastTime = performance.now();
-        requestAnimationFrame(this.loop.bind(this));
-    }
 
     loop(timestamp) {
         if (!this.isRunning) return;
@@ -479,7 +314,7 @@ export class Game {
                 }
             }
 
-            this.physics.update(this.ball, level);
+            this.physics.update(this.ball, level, this.tileMap);
             this.particles.update();
             if (level.entities) {
                 for (const entity of level.entities) {
@@ -505,12 +340,20 @@ export class Game {
             // Center on ball, but clamp to world bounds
             // World: 600x600
             // Viewport: 540x540
-            // Max Scroll: 600 - 540 = 60
-            const camX = Math.max(0, Math.min(this.ball.x - this.renderer.VIEWPORT_W / 2, this.renderer.LOGICAL_WIDTH - this.renderer.VIEWPORT_W));
-            const camY = Math.max(0, Math.min(this.ball.y - this.renderer.VIEWPORT_H / 2, this.renderer.LOGICAL_HEIGHT - this.renderer.VIEWPORT_H));
+            // Center of Viewport is 270, 270
+            // Min Center X = 270, Max Center X = 600 - 270 = 330
 
-            this.renderer.setCamera(camX, camY);
-            this.input.setCamera(camX, camY); // Update input offset
+            const halfView = 270;
+            const maxScroll = 600 - halfView; // 330
+
+            const targetX = Math.max(halfView, Math.min(this.ball.x, maxScroll));
+            const targetY = Math.max(halfView, Math.min(this.ball.y, maxScroll));
+
+            this.viewport.x = targetX;
+            this.viewport.y = targetY;
+
+            // Input expects top-left offset
+            this.input.setCamera(targetX - halfView, targetY - halfView);
         }
     }
 
@@ -520,36 +363,42 @@ export class Game {
 
         const level = this.levelManager.getCurrentLevel();
         if (level) {
-            this.renderer.drawLevel(level);
+            this.renderer.drawLevel(this.tileMap);
+            this.renderer.drawHazards(level); // Draw Hazards (Sand)
+            this.renderer.drawHole(level);    // Draw Hole
             this.renderer.drawWindParticles();
 
             if (this.showWindArrows) {
                 const windZones = this.levelManager.getWindZones();
                 this.renderer.drawDebugArrows(windZones);
             }
-            if (this.debugMode) {
-                const windZones = this.levelManager.getWindZones();
-                this.renderer.drawDebugZones(windZones);
-            }
 
             this.renderer.drawTrail(); // Draw trail FIRST
-            this.particles.draw(this.ctx); // Draw particles
+            this.renderer.drawTrail(); // Draw trail FIRST
+            this.particles.draw(this.ctx, this.viewport); // Draw particles (Passed Viewport)
+            this.renderer.drawBall(this.ball); // Draw ball ON TOP
             this.renderer.drawBall(this.ball); // Draw ball ON TOP
 
             if (!this.ball.isMoving && this.input.isDragging) {
                 const velocity = this.input.getLaunchVelocity();
                 if (velocity) {
                     if (this.isUsingPrediction) {
-                        const trajectory = this.physics.simulateTrajectory(this.ball, velocity, level);
+                        const trajectory = this.physics.simulateTrajectory(this.ball, velocity, level, this.tileMap);
                         this.renderer.drawAimLine(this.ball, trajectory);
                     } else {
                         this.renderer.drawBasicAimLine(this.ball, velocity);
                     }
                 }
             }
+
+            // Debug Overlay (Must be LAST to be visible)
+            if (this.debugMode) {
+                const windZones = this.levelManager.getWindZones();
+                this.renderer.drawDebugZones(windZones);
+                this.renderer.drawPhysicsDebug(this.ball, this.tileMap);
+            }
         }
 
         this.renderer.endScene(); // <--- End Viewport Clip
-
     }
 }

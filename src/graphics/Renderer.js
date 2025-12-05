@@ -1,6 +1,7 @@
 export class Renderer {
-    constructor(ctx) {
+    constructor(ctx, viewport) {
         this.ctx = ctx;
+        this.viewport = viewport;
 
         // ────── CANVAS LAYOUT CONSTANTS (CRITICAL) ──────
         // ────── CANVAS LAYOUT CONSTANTS (CRITICAL) ──────
@@ -24,10 +25,6 @@ export class Renderer {
         this.shakeX = 0;
         this.shakeY = 0;
         this.shakeDuration = 0;
-
-        // Camera System
-        this.cameraX = 0;
-        this.cameraY = 0;
 
         // Trail System
         this.trailParticles = [];
@@ -69,11 +66,17 @@ export class Renderer {
         this.updateShake();
         // Clear to transparent - let DOM ribbons/background show through
         this.ctx.clearRect(0, 0, this.LOGICAL_WIDTH, this.LOGICAL_HEIGHT);
+
+        // Bedrock Fill (The Void)
+        // Fill the entire logical canvas with the darkest color
+        this.ctx.fillStyle = this.colors.darkest;
+        this.ctx.fillRect(0, 0, this.LOGICAL_WIDTH, this.LOGICAL_HEIGHT);
     }
 
     setCamera(x, y) {
-        this.cameraX = x;
-        this.cameraY = y;
+        // Delegate to viewport
+        this.viewport.x = x;
+        this.viewport.y = y;
     }
 
     startScene() {
@@ -84,65 +87,163 @@ export class Renderer {
         this.ctx.rect(this.VIEWPORT_X, this.VIEWPORT_Y, this.VIEWPORT_W, this.VIEWPORT_H);
         this.ctx.clip();
 
-        // 2. Apply Camera/Shake
-        // Shake moves the world inside the viewport
-        // Camera moves the world in the opposite direction
-        // Viewport Offset moves the origin to the viewport start
-        this.ctx.translate(this.VIEWPORT_X + this.shakeX - this.cameraX, this.VIEWPORT_Y + this.shakeY - this.cameraY);
+        // 2. Apply Viewport Offset & Shake
+        // We ONLY translate to the viewport position on screen.
+        // The Viewport class handles the World -> Screen transform for entities.
+        this.ctx.translate(this.VIEWPORT_X + this.shakeX, this.VIEWPORT_Y + this.shakeY);
 
-        // 3. Draw Game Background (clipped to viewport)
-        // We need to draw the background relative to the camera to cover the whole world
+        // 3. Draw Game Background
+        // Since we are now in "Viewport Screen Space" (0,0 is top-left of viewport),
+        // we fill the viewport rect.
         this.ctx.fillStyle = this.colors.light;
-        this.ctx.fillRect(this.cameraX, this.cameraY, this.VIEWPORT_W, this.VIEWPORT_H); // Draw bg only for viewport? No, draw full world.
-        this.ctx.fillRect(0, 0, this.LOGICAL_WIDTH, this.LOGICAL_HEIGHT);
+        this.ctx.fillRect(0, 0, this.VIEWPORT_W, this.VIEWPORT_H);
+
+        // Debug Grid Overlay (if zoom != 1)
+        if (this.viewport.zoom !== 1.0) {
+            this.drawDebugGrid();
+        }
+    }
+
+    drawDebugGrid() {
+        this.ctx.save();
+        this.ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+        this.ctx.lineWidth = 1;
+
+        // Get visible range
+        const start = this.viewport.screenToGrid(this.VIEWPORT_X, this.VIEWPORT_Y);
+        const end = this.viewport.screenToGrid(this.VIEWPORT_X + this.VIEWPORT_W, this.VIEWPORT_Y + this.VIEWPORT_H);
+
+        const minCol = Math.floor(start.col) - 1;
+        const maxCol = Math.ceil(end.col) + 1;
+        const minRow = Math.floor(start.row) - 1;
+        const maxRow = Math.ceil(end.row) + 1;
+
+        for (let c = minCol; c <= maxCol; c++) {
+            for (let r = minRow; r <= maxRow; r++) {
+                const { x, y, size } = this.viewport.gridToScreen(c, r);
+                this.ctx.strokeRect(x, y, size, size);
+            }
+        }
+        this.ctx.restore();
     }
 
     endScene() {
         this.ctx.restore();
     }
 
-    drawLevel(level) {
-        // Draw Hazards (Sand)
-        this.ctx.fillStyle = this.colors.dark;
-        if (level.hazards) {
-            for (const hazard of level.hazards) {
-                this.ctx.fillRect(hazard.x, hazard.y, hazard.width, hazard.height);
+    getScreenRect(entity) {
+        const pos = this.viewport.worldToScreen(entity.x, entity.y);
+        return {
+            x: pos.x,
+            y: pos.y,
+            w: entity.width * this.viewport.zoom,
+            h: entity.height * this.viewport.zoom
+        };
+    }
 
-                // Sand Noise
+    drawLevel(tileMap) {
+        if (!tileMap) return;
+
+        // 1. Determine Visible Range
+        // We want to iterate only tiles that are potentially on screen.
+        // For now, we can iterate all keys in tileMap if it's small, but for "Infinite" we need bounds.
+        // Let's iterate the visible bounds + buffer.
+
+        // Note: Viewport.screenToGrid expects screen coordinates relative to the canvas (0-600).
+        // Our viewport is at VIEWPORT_X, VIEWPORT_Y.
+        const topLeft = this.viewport.screenToGrid(this.VIEWPORT_X, this.VIEWPORT_Y);
+        const bottomRight = this.viewport.screenToGrid(this.VIEWPORT_X + this.VIEWPORT_W, this.VIEWPORT_Y + this.VIEWPORT_H);
+
+        const minCol = Math.floor(topLeft.col) - 1;
+        const maxCol = Math.ceil(bottomRight.col) + 1;
+        const minRow = Math.floor(topLeft.row) - 1;
+        const maxRow = Math.ceil(bottomRight.row) + 1;
+
+        for (let c = minCol; c <= maxCol; c++) {
+            for (let r = minRow; r <= maxRow; r++) {
+                const type = tileMap.getTile(c, r);
+                if (type) {
+                    this.drawTile(c, r, type);
+                }
+            }
+        }
+    }
+
+    drawHole(level) {
+        if (!level.hole) return;
+
+        const hole = level.hole;
+        // Transform World -> Screen (Hole x,y is center)
+        const pos = this.viewport.worldToScreen(hole.x, hole.y);
+        const radius = (hole.radius || 12) * this.viewport.zoom;
+
+        this.ctx.fillStyle = this.colors.darkest;
+        this.ctx.beginPath();
+        this.ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+        this.ctx.fill();
+    }
+
+    drawHazards(level) {
+        if (!level.hazards) return;
+
+        for (const hazard of level.hazards) {
+            const rect = this.getScreenRect(hazard);
+            this.ctx.fillStyle = this.colors.dark;
+            this.ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+
+            // Noise
+            this.ctx.save();
+            this.ctx.fillStyle = '#0f380f';
+            this.ctx.globalAlpha = 0.1;
+            // Simple noise pattern based on screen coords to avoid flickering
+            // Or just random if we don't mind flickering
+            if (Math.random() > 0.5) {
+                this.ctx.fillRect(rect.x + rect.w / 2, rect.y + rect.h / 2, 2, 2);
+            }
+            this.ctx.restore();
+        }
+    }
+
+    drawTile(col, row, type) {
+        const { x, y, size } = this.viewport.gridToScreen(col, row);
+
+        // Round to integer for crisp rendering
+        const rx = Math.floor(x);
+        const ry = Math.floor(y);
+        const rSize = Math.ceil(size); // Ceil to avoid gaps
+
+        switch (type) {
+            case 'WALL':
+                this.ctx.fillStyle = this.colors.darkest;
+                this.ctx.fillRect(rx, ry, rSize, rSize);
+                break;
+            case 'HOLE':
+                // Draw grass bg first
+                this.ctx.fillStyle = this.colors.light; // Grass
+                this.ctx.fillRect(rx, ry, rSize, rSize);
+
+                this.ctx.fillStyle = this.colors.darkest;
+                this.ctx.beginPath();
+                this.ctx.arc(rx + rSize / 2, ry + rSize / 2, rSize / 4, 0, Math.PI * 2);
+                this.ctx.fill();
+                break;
+            case 'SAND':
+                this.ctx.fillStyle = this.colors.dark;
+                this.ctx.fillRect(rx, ry, rSize, rSize);
+                // Noise
                 this.ctx.save();
-                this.ctx.fillStyle = '#0f380f'; // Darkest green
-                this.ctx.globalAlpha = 0.1; // Subtle
-                // Density: 1 dot per 400px area (20x20)
-                const dotCount = (hazard.width * hazard.height) / 400;
-                for (let i = 0; i < dotCount; i++) {
-                    const nx = hazard.x + Math.random() * hazard.width;
-                    const ny = hazard.y + Math.random() * hazard.height;
-                    this.ctx.fillRect(nx, ny, 2, 2);
+                this.ctx.fillStyle = '#0f380f';
+                this.ctx.globalAlpha = 0.1;
+                if (Math.random() > 0.5) { // Static noise for now (flickering), ideally seeded
+                    this.ctx.fillRect(rx + rSize / 2, ry + rSize / 2, 2, 2);
                 }
                 this.ctx.restore();
-            }
-        }
-
-        // Draw Slopes
-        this.drawSlopes(level);
-
-        // Draw Entities (Wind, Boosts, Switches, etc.)
-        this.drawEntities(level);
-
-        // Draw Walls
-        this.ctx.fillStyle = this.colors.darkest;
-        if (level.walls) {
-            for (const wall of level.walls) {
-                this.ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
-            }
-        }
-
-        // Draw Hole
-        if (level.hole) {
-            this.ctx.fillStyle = this.colors.darkest;
-            this.ctx.beginPath();
-            this.ctx.arc(level.hole.x, level.hole.y, level.hole.radius, 0, Math.PI * 2);
-            this.ctx.fill();
+                break;
+            default:
+                // Unknown type, maybe just debug rect
+                this.ctx.strokeStyle = 'red';
+                this.ctx.strokeRect(rx, ry, rSize, rSize);
+                break;
         }
     }
 
@@ -198,10 +299,11 @@ export class Renderer {
             const offsetX = (time * slope.vx * 100) % gridX;
             const offsetY = (time * slope.vy * 100) % gridY;
 
-            // Clip to zone
+            // Clip to zone (Screen Space)
+            const rect = this.getScreenRect(slope);
             this.ctx.save();
             this.ctx.beginPath();
-            this.ctx.rect(slope.x, slope.y, slope.width, slope.height);
+            this.ctx.rect(rect.x, rect.y, rect.w, rect.h);
             this.ctx.clip();
 
             // Render Loop
@@ -209,11 +311,14 @@ export class Renderer {
             for (let x = -gridX; x < slope.width + gridX; x += gridX) {
                 for (let y = -gridY; y < slope.height + gridY; y += gridY) {
 
-                    // Calculate raw position with offset
-                    let drawX = slope.x + x + offsetX;
-                    let drawY = slope.y + y + offsetY;
+                    // Calculate raw position with offset (World Space)
+                    let worldDrawX = slope.x + x + offsetX;
+                    let worldDrawY = slope.y + y + offsetY;
 
-                    this.ctx.fillText(char, drawX, drawY);
+                    // Transform to Screen Space
+                    const screenPos = this.viewport.worldToScreen(worldDrawX, worldDrawY);
+
+                    this.ctx.fillText(char, screenPos.x, screenPos.y);
                 }
             }
             this.ctx.restore(); // Remove clip
@@ -223,76 +328,88 @@ export class Renderer {
     }
 
     drawWind(entity) {
+        const rect = this.getScreenRect(entity);
         this.ctx.save();
         this.ctx.fillStyle = 'rgba(139, 172, 15, 0.3)'; // Light transparent
-        this.ctx.fillRect(entity.x, entity.y, entity.width, entity.height);
+        this.ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
 
         // Draw simple arrows
         this.ctx.strokeStyle = this.colors.lightest;
         this.ctx.lineWidth = 2;
-        const centerX = entity.x + entity.width / 2;
-        const centerY = entity.y + entity.height / 2;
+        const centerX = rect.x + rect.w / 2;
+        const centerY = rect.y + rect.h / 2;
 
         this.ctx.beginPath();
         this.ctx.moveTo(centerX, centerY);
-        this.ctx.lineTo(centerX + entity.vx * 10, centerY + entity.vy * 10);
+        this.ctx.lineTo(centerX + entity.vx * 10 * this.viewport.zoom, centerY + entity.vy * 10 * this.viewport.zoom);
         this.ctx.stroke();
         this.ctx.restore();
     }
 
     drawMover(entity) {
+        const rect = this.getScreenRect(entity);
         this.ctx.fillStyle = this.colors.darkest;
-        this.ctx.fillRect(entity.x, entity.y, entity.width, entity.height);
+        this.ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
     }
 
     drawBoost(entity) {
+        const rect = this.getScreenRect(entity);
         this.ctx.fillStyle = entity.cooldown ? this.colors.dark : this.colors.lightest;
-        this.ctx.fillRect(entity.x, entity.y, entity.width, entity.height);
+        this.ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
 
         // Chevron
         if (!entity.cooldown) {
             this.ctx.strokeStyle = this.colors.darkest;
             this.ctx.beginPath();
-            this.ctx.moveTo(entity.x + 5, entity.y + entity.height / 2);
-            this.ctx.lineTo(entity.x + entity.width / 2, entity.y + 5);
-            this.ctx.lineTo(entity.x + entity.width - 5, entity.y + entity.height / 2);
+            this.ctx.moveTo(rect.x + 5 * this.viewport.zoom, rect.y + rect.h / 2);
+            this.ctx.lineTo(rect.x + rect.w / 2, rect.y + 5 * this.viewport.zoom);
+            this.ctx.lineTo(rect.x + rect.w - 5 * this.viewport.zoom, rect.y + rect.h / 2);
             this.ctx.stroke();
         }
     }
 
     drawSwitch(entity) {
+        const pos = this.viewport.worldToScreen(entity.x, entity.y);
+        const radius = (entity.radius || 10) * this.viewport.zoom;
+
         this.ctx.fillStyle = entity.active ? this.colors.lightest : this.colors.dark;
         this.ctx.beginPath();
-        this.ctx.arc(entity.x, entity.y, entity.radius || 10, 0, Math.PI * 2);
+        this.ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
         this.ctx.fill();
         this.ctx.strokeStyle = this.colors.darkest;
         this.ctx.stroke();
     }
 
     drawGate(entity) {
+        const rect = this.getScreenRect(entity);
         if (entity.open) {
             this.ctx.strokeStyle = this.colors.dark;
             this.ctx.setLineDash([5, 5]);
-            this.ctx.strokeRect(entity.x, entity.y, entity.width, entity.height);
+            this.ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
             this.ctx.setLineDash([]);
         } else {
             this.ctx.fillStyle = this.colors.darkest;
-            this.ctx.fillRect(entity.x, entity.y, entity.width, entity.height);
+            this.ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
             // Lock icon or X
             this.ctx.strokeStyle = this.colors.light;
             this.ctx.beginPath();
-            this.ctx.moveTo(entity.x, entity.y);
-            this.ctx.lineTo(entity.x + entity.width, entity.y + entity.height);
-            this.ctx.moveTo(entity.x + entity.width, entity.y);
-            this.ctx.lineTo(entity.x, entity.y + entity.height);
+            this.ctx.moveTo(rect.x, rect.y);
+            this.ctx.lineTo(rect.x + rect.w, rect.y + rect.h);
+            this.ctx.moveTo(rect.x + rect.w, rect.y);
+            this.ctx.lineTo(rect.x, rect.y + rect.h);
             this.ctx.stroke();
         }
     }
 
     drawBall(ball) {
+        // Transform World -> Screen
+        const { x, y, size } = this.viewport.worldToScreen(ball.x, ball.y);
+        // Scale radius
+        const radius = ball.radius * this.viewport.zoom;
+
         this.ctx.fillStyle = this.colors.lightest;
         this.ctx.beginPath();
-        this.ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        this.ctx.arc(x, y, radius, 0, Math.PI * 2);
         this.ctx.fill();
 
         // Outline
@@ -316,32 +433,37 @@ export class Renderer {
             // Subtracting index ensures the wave moves "forward" along the path.
             const isActive = (timeOffset - index) % patternSpacing === 0;
 
+            // Transform point to screen space
+            const screenPos = this.viewport.worldToScreen(point.x, point.y);
+
             if (isActive) {
                 // --- ACTIVE STATE (The Flash) ---
                 // Draw a solid 4x4 block of the lightest color.
                 // This makes it "pop" against the background and the normal dots.
                 this.ctx.fillStyle = this.colors.lightest; // #9bbc0f
-                this.ctx.fillRect(point.x - 2, point.y - 2, 4, 4);
+                this.ctx.fillRect(screenPos.x - 2, screenPos.y - 2, 4, 4);
 
             } else {
                 // --- NORMAL STATE (The Standard Breadcrumb) ---
                 // Outline (Darkest)
                 this.ctx.fillStyle = this.colors.darkest; // #0f380f
-                this.ctx.fillRect(point.x - 2, point.y - 2, 4, 4);
+                this.ctx.fillRect(screenPos.x - 2, screenPos.y - 2, 4, 4);
 
                 // Core (Lightest)
                 this.ctx.fillStyle = this.colors.lightest; // #9bbc0f
-                this.ctx.fillRect(point.x - 1, point.y - 1, 2, 2);
+                this.ctx.fillRect(screenPos.x - 1, screenPos.y - 1, 2, 2);
             }
         });
 
         // 2. Draw Ghost Ball (The Destination)
         const endPoint = trajectory[trajectory.length - 1];
+        const screenEnd = this.viewport.worldToScreen(endPoint.x, endPoint.y);
+
         this.ctx.save();
         this.ctx.globalAlpha = 0.5;
         this.ctx.fillStyle = this.colors.lightest;
         this.ctx.beginPath();
-        this.ctx.arc(endPoint.x, endPoint.y, 6, 0, Math.PI * 2); // Radius 6 (slightly smaller than real ball)
+        this.ctx.arc(screenEnd.x, screenEnd.y, 6, 0, Math.PI * 2); // Radius 6 (slightly smaller than real ball)
         this.ctx.fill();
         this.ctx.strokeStyle = this.colors.darkest;
         this.ctx.lineWidth = 1;
@@ -372,8 +494,11 @@ export class Renderer {
         this.ctx.setLineDash([5, 5]);
 
         this.ctx.beginPath();
-        this.ctx.moveTo(ball.x, ball.y);
-        this.ctx.lineTo(ball.x + dx, ball.y + dy);
+        const start = this.viewport.worldToScreen(ball.x, ball.y);
+        const end = this.viewport.worldToScreen(ball.x + dx, ball.y + dy);
+
+        this.ctx.moveTo(start.x, start.y);
+        this.ctx.lineTo(end.x, end.y);
         this.ctx.stroke();
 
         this.ctx.restore();
@@ -462,16 +587,19 @@ export class Renderer {
                 this.ctx.strokeStyle = this.colors.lightest;
                 this.ctx.lineWidth = 1;
                 this.ctx.beginPath();
-                this.ctx.moveTo(p.trail[0].x, p.trail[0].y);
+                const start = this.viewport.worldToScreen(p.trail[0].x, p.trail[0].y);
+                this.ctx.moveTo(start.x, start.y);
                 for (let i = 1; i < p.trail.length; i++) {
-                    this.ctx.lineTo(p.trail[i].x, p.trail[i].y);
+                    const pt = this.viewport.worldToScreen(p.trail[i].x, p.trail[i].y);
+                    this.ctx.lineTo(pt.x, pt.y);
                 }
                 this.ctx.stroke();
             }
 
             // Draw Head
+            const head = this.viewport.worldToScreen(p.x, p.y);
             this.ctx.fillStyle = this.colors.lightest;
-            this.ctx.fillRect(p.x, p.y, 3, 3); // Larger size (was 2x2)
+            this.ctx.fillRect(head.x, head.y, 3, 3); // Larger size (was 2x2)
         }
         this.ctx.restore();
     }
@@ -576,7 +704,8 @@ export class Renderer {
             const baseAlpha = getAlpha(p);
             this.ctx.globalAlpha = baseAlpha * 0.5;
             const size = p.isFlash ? p.size * 2.0 : p.size * 4.0;
-            this.ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+            const screenPos = this.viewport.worldToScreen(p.x, p.y);
+            this.ctx.fillRect(screenPos.x - size / 2, screenPos.y - size / 2, size, size);
         }
 
         // Pass 2: Soft Bloom (Outer)
@@ -586,7 +715,8 @@ export class Renderer {
             const baseAlpha = getAlpha(p);
             this.ctx.globalAlpha = baseAlpha * 0.2;
             const size = p.isFlash ? p.size * 3.0 : p.size * 6.0;
-            this.ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+            const screenPos = this.viewport.worldToScreen(p.x, p.y);
+            this.ctx.fillRect(screenPos.x - size / 2, screenPos.y - size / 2, size, size);
         }
 
         // Pass 3: Core (The Soul)
@@ -602,9 +732,45 @@ export class Renderer {
                 this.ctx.fillStyle = this.colors.dark; // #306230
             }
 
-            this.ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+            const screenPos = this.viewport.worldToScreen(p.x, p.y);
+            this.ctx.fillRect(screenPos.x - p.size / 2, screenPos.y - p.size / 2, p.size, p.size);
         }
 
+        this.ctx.restore();
+    }
+
+    drawPhysicsDebug(ball, tileMap) {
+        this.ctx.save();
+        this.ctx.lineWidth = 1;
+
+        // 1. Draw Ball Body (Blue Circle)
+        const screenBall = this.viewport.worldToScreen(ball.x, ball.y);
+        this.ctx.strokeStyle = 'blue';
+        this.ctx.beginPath();
+        this.ctx.arc(screenBall.x, screenBall.y, ball.radius * this.viewport.zoom, 0, Math.PI * 2);
+        this.ctx.stroke();
+
+        // 2. Draw Wall Colliders (Red Rects)
+        if (tileMap) {
+            const col = Math.floor(ball.x / 60);
+            const row = Math.floor(ball.y / 60);
+
+            this.ctx.strokeStyle = 'red';
+
+            // Check 3x3 neighborhood
+            for (let c = col - 1; c <= col + 1; c++) {
+                for (let r = row - 1; r <= row + 1; r++) {
+                    const tile = tileMap.getTile(c, r);
+                    if (tile === 'WALL') {
+                        // Wall is at c*60, r*60
+                        // We need to transform the top-left corner
+                        const screenWall = this.viewport.worldToScreen(c * 60, r * 60);
+                        const size = 60 * this.viewport.zoom;
+                        this.ctx.strokeRect(screenWall.x, screenWall.y, size, size);
+                    }
+                }
+            }
+        }
         this.ctx.restore();
     }
 }

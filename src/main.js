@@ -23,6 +23,41 @@ window.addEventListener('DOMContentLoaded', () => {
         onCampaignLevel: (index) => gameManager.startCampaignLevel(index)
     });
 
+    // Initialize Editor
+    // Dynamic import would be better for code splitting, but static is fine for now
+    import('./editor/LevelEditor.js').then(module => {
+        const LevelEditor = module.LevelEditor;
+        const levelEditor = new LevelEditor(game);
+
+        // Ribbon Logic
+        const bottomRibbon = document.getElementById('bottom-ribbon');
+        if (bottomRibbon) {
+            bottomRibbon.addEventListener('click', (e) => {
+                const btn = e.target.closest('button');
+                if (!btn) return;
+
+                const section = btn.dataset.section;
+                if (section === 'settings') {
+                    settingsModal.render();
+                    game.audio.playUiBlip();
+                } else if (section === 'courses') {
+                    courseModal.open();
+                    game.audio.playUiBlip();
+                } else if (section === 'editor') {
+                    if (levelEditor.enabled) {
+                        levelEditor.disable();
+                        btn.classList.remove('active'); // Optional visual feedback
+                    } else {
+                        levelEditor.enable();
+                        btn.classList.add('active'); // Optional visual feedback
+                        alert("Editor Mode Enabled!\nCtrl+S: Export Level Code\nCtrl+L: Import Level Code");
+                    }
+                    game.audio.playUiBlip();
+                }
+            });
+        }
+    });
+
     // Start Screen Logic
     const startScreen = document.getElementById('start-screen');
 
@@ -52,23 +87,5 @@ window.addEventListener('DOMContentLoaded', () => {
         // Listen for both click (desktop) and touchstart (mobile) for immediate response
         startScreen.addEventListener('click', handleStartInteraction);
         startScreen.addEventListener('touchstart', handleStartInteraction, { passive: false });
-    }
-
-    // Ribbon Logic
-    const bottomRibbon = document.getElementById('bottom-ribbon');
-    if (bottomRibbon) {
-        bottomRibbon.addEventListener('click', (e) => {
-            const btn = e.target.closest('button');
-            if (!btn) return;
-
-            const section = btn.dataset.section;
-            if (section === 'settings') {
-                settingsModal.render();
-                game.audio.playUiBlip();
-            } else if (section === 'courses') {
-                courseModal.open();
-                game.audio.playUiBlip();
-            }
-        });
     }
 });

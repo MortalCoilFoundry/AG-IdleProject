@@ -303,4 +303,14 @@ export class LevelManager {
                 };
             });
     }
+
+    // Editor Support
+    getCurrentLevelData() {
+        return this.getCurrentLevel();
+    }
+
+    loadLevelFromData(levelData) {
+        this.loadOneOff(levelData);
+        eventBus.emit('LEVEL_LOADED', levelData);
+    }
 }

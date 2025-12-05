@@ -39,11 +39,25 @@ export class ParticleSystem {
         }
     }
 
-    draw(ctx) {
+    draw(ctx, viewport) {
         for (const p of this.particles) {
             ctx.fillStyle = p.color;
             ctx.globalAlpha = p.life;
-            ctx.fillRect(p.x, p.y, p.size, p.size);
+
+            // Transform World -> Screen
+            // Default to raw coordinates if viewport is missing (fallback)
+            let x = p.x;
+            let y = p.y;
+            let size = p.size;
+
+            if (viewport) {
+                const screenPos = viewport.worldToScreen(p.x, p.y);
+                x = screenPos.x;
+                y = screenPos.y;
+                size = p.size * viewport.zoom;
+            }
+
+            ctx.fillRect(x, y, size, size);
             ctx.globalAlpha = 1.0;
         }
     }

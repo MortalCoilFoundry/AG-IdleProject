@@ -6,9 +6,20 @@ export class Physics {
         this.frictionSand = 0.85;
         this.restitution = 0.75;
         this.stopThreshold = 0.05;
+
+        this.SLOPE_FORCES = {
+            'SLOPE_NORTH': { x: 0, y: -0.05 },
+            'SLOPE_SOUTH': { x: 0, y: 0.05 },
+            'SLOPE_EAST': { x: 0.05, y: 0 },
+            'SLOPE_WEST': { x: -0.05, y: 0 },
+            'SLOPE_NE': { x: 0.05, y: -0.05 },
+            'SLOPE_NW': { x: -0.05, y: -0.05 },
+            'SLOPE_SE': { x: 0.05, y: 0.05 },
+            'SLOPE_SW': { x: -0.05, y: 0.05 }
+        };
     }
 
-    update(ball, level) {
+    update(ball, level, tileMap) {
         if (!ball.isMoving) return;
 
         // 1. Accumulate External Forces (Slope + Wind)
@@ -30,14 +41,16 @@ export class Physics {
             }
         }
 
-        // Apply Slopes (Add to force)
-        if (level.slopes) {
-            for (const slope of level.slopes) {
-                if (ball.x >= slope.x && ball.x <= slope.x + slope.width &&
-                    ball.y >= slope.y && ball.y <= slope.y + slope.height) {
-                    forceX += slope.vx;
-                    forceY += slope.vy;
-                }
+        // Apply Slopes (Grid Based)
+        if (tileMap) {
+            const col = Math.floor(ball.x / 60);
+            const row = Math.floor(ball.y / 60);
+            const tile = tileMap.getTile(col, row);
+
+            if (tile && this.SLOPE_FORCES[tile]) {
+                const force = this.SLOPE_FORCES[tile];
+                forceX += force.x;
+                forceY += force.y;
             }
         }
 
@@ -96,8 +109,8 @@ export class Physics {
         ball.x += ball.vx;
         ball.y += ball.vy;
 
-        // Wall Collisions
-        this.handleWallCollisions(ball, level);
+        // Wall Collisions (Grid Based)
+        this.handleWallCollisions(ball, tileMap);
 
         // Moving Obstacles
         this.resolveMovingCollisions(ball, level);
@@ -133,10 +146,6 @@ export class Physics {
         }
         return false;
     }
-
-
-
-
 
     checkBoosts(ball, level) {
         if (!level.entities) return;
@@ -209,73 +218,67 @@ export class Physics {
         }
     }
 
-    handleWallCollisions(ball, level) {
+    handleWallCollisions(ball, tileMap) {
         const r = ball.radius;
         let hit = false;
 
-        // Canvas bounds
-        if (ball.x - r < 0) { ball.x = r; ball.vx *= -this.restitution; hit = true; }
-        if (ball.x + r > 600) { ball.x = 600 - r; ball.vx *= -this.restitution; hit = true; }
-        if (ball.y - r < 0) { ball.y = r; ball.vy *= -this.restitution; hit = true; }
-        if (ball.y + r > 600) { ball.y = 600 - r; ball.vy *= -this.restitution; hit = true; }
+        // 1. Auto-Border (Bedrock)
+        if (tileMap) {
+            const minX = 0;
+            const minY = 0;
+            const maxX = tileMap.width * 60;
+            const maxY = tileMap.height * 60;
 
-        // Level walls
-        if (level.walls) {
-            for (const wall of level.walls) {
-                const closestX = Math.max(wall.x, Math.min(ball.x, wall.x + wall.width));
-                const closestY = Math.max(wall.y, Math.min(ball.y, wall.y + wall.height));
-
-                const dx = ball.x - closestX;
-                const dy = ball.y - closestY;
-                const distSq = dx * dx + dy * dy;
-
-                if (distSq < r * r && distSq > 0) {
-                    const dist = Math.sqrt(distSq);
-                    const overlap = r - dist;
-
-                    // Normalize
-                    const nx = dx / dist;
-                    const ny = dy / dist;
-
-                    // Push out
-                    ball.x += nx * overlap;
-                    ball.y += ny * overlap;
-
-                    // Reflect velocity
-                    // v' = v - 2 * (v . n) * n
-                    const dot = ball.vx * nx + ball.vy * ny;
-                    ball.vx = (ball.vx - 2 * dot * nx) * this.restitution;
-                    ball.vy = (ball.vy - 2 * dot * ny) * this.restitution;
-
-                    hit = true;
-                }
-            }
+            if (ball.x - r < minX) { ball.x = minX + r; ball.vx *= -this.restitution; hit = true; }
+            if (ball.x + r > maxX) { ball.x = maxX - r; ball.vx *= -this.restitution; hit = true; }
+            if (ball.y - r < minY) { ball.y = minY + r; ball.vy *= -this.restitution; hit = true; }
+            if (ball.y + r > maxY) { ball.y = maxY - r; ball.vy *= -this.restitution; hit = true; }
+        } else {
+            // Fallback to old 600x600
+            if (ball.x - r < 0) { ball.x = r; ball.vx *= -this.restitution; hit = true; }
+            if (ball.x + r > 600) { ball.x = 600 - r; ball.vx *= -this.restitution; hit = true; }
+            if (ball.y - r < 0) { ball.y = r; ball.vy *= -this.restitution; hit = true; }
+            if (ball.y + r > 600) { ball.y = 600 - r; ball.vy *= -this.restitution; hit = true; }
         }
 
-        // Gates (treated as walls if closed)
-        if (level.entities) {
-            for (const entity of level.entities) {
-                if (entity.type === 'gate' && !entity.open) {
-                    const closestX = Math.max(entity.x, Math.min(ball.x, entity.x + entity.width));
-                    const closestY = Math.max(entity.y, Math.min(ball.y, entity.y + entity.height));
+        // 2. Grid Walls
+        if (tileMap) {
+            const minCol = Math.floor((ball.x - r) / 60);
+            const maxCol = Math.floor((ball.x + r) / 60);
+            const minRow = Math.floor((ball.y - r) / 60);
+            const maxRow = Math.floor((ball.y + r) / 60);
 
-                    const dx = ball.x - closestX;
-                    const dy = ball.y - closestY;
-                    const distSq = dx * dx + dy * dy;
+            // Check neighborhood defined by ball size
+            for (let c = minCol; c <= maxCol; c++) {
+                for (let r_idx = minRow; r_idx <= maxRow; r_idx++) {
+                    const tile = tileMap.getTile(c, r_idx);
+                    if (tile === 'WALL') {
+                        // Create temp AABB
+                        const wall = { x: c * 60, y: r_idx * 60, width: 60, height: 60 };
 
-                    if (distSq < r * r && distSq > 0) {
-                        const dist = Math.sqrt(distSq);
-                        const overlap = r - dist;
-                        const nx = dx / dist;
-                        const ny = dy / dist;
+                        const closestX = Math.max(wall.x, Math.min(ball.x, wall.x + wall.width));
+                        const closestY = Math.max(wall.y, Math.min(ball.y, wall.y + wall.height));
 
-                        ball.x += nx * overlap;
-                        ball.y += ny * overlap;
+                        const dx = ball.x - closestX;
+                        const dy = ball.y - closestY;
+                        const distSq = dx * dx + dy * dy;
 
-                        const dot = ball.vx * nx + ball.vy * ny;
-                        ball.vx = (ball.vx - 2 * dot * nx) * this.restitution;
-                        ball.vy = (ball.vy - 2 * dot * ny) * this.restitution;
-                        hit = true;
+                        if (distSq < r * r && distSq > 0) {
+                            const dist = Math.sqrt(distSq);
+                            const overlap = r - dist;
+
+                            const nx = dx / dist;
+                            const ny = dy / dist;
+
+                            ball.x += nx * overlap;
+                            ball.y += ny * overlap;
+
+                            const dot = ball.vx * nx + ball.vy * ny;
+                            ball.vx = (ball.vx - 2 * dot * nx) * this.restitution;
+                            ball.vy = (ball.vy - 2 * dot * ny) * this.restitution;
+
+                            hit = true;
+                        }
                     }
                 }
             }
@@ -344,7 +347,7 @@ export class Physics {
         }
     }
 
-    simulateTrajectory(startBall, velocity, level) {
+    simulateTrajectory(startBall, velocity, level, tileMap) {
         // Clone ball state
         const ball = {
             x: startBall.x,
@@ -377,14 +380,16 @@ export class Physics {
                 }
             }
 
-            // Apply Slopes
-            if (level.slopes) {
-                for (const slope of level.slopes) {
-                    if (ball.x >= slope.x && ball.x <= slope.x + slope.width &&
-                        ball.y >= slope.y && ball.y <= slope.y + slope.height) {
-                        forceX += slope.vx;
-                        forceY += slope.vy;
-                    }
+            // Apply Slopes (Grid Based)
+            if (tileMap) {
+                const col = Math.floor(ball.x / 60);
+                const row = Math.floor(ball.y / 60);
+                const tile = tileMap.getTile(col, row);
+
+                if (tile && this.SLOPE_FORCES[tile]) {
+                    const force = this.SLOPE_FORCES[tile];
+                    forceX += force.x;
+                    forceY += force.y;
                 }
             }
 
@@ -431,35 +436,53 @@ export class Physics {
             ball.x += ball.vx;
             ball.y += ball.vy;
 
-            // Wall Collisions (Math only)
+            // Wall Collisions (Grid Based)
+            // Note: We duplicate logic here because simulateTrajectory shouldn't emit events
             const r = ball.radius;
-            // Canvas bounds
-            if (ball.x - r < 0) { ball.x = r; ball.vx *= -this.restitution; }
-            if (ball.x + r > 600) { ball.x = 600 - r; ball.vx *= -this.restitution; }
-            if (ball.y - r < 0) { ball.y = r; ball.vy *= -this.restitution; }
-            if (ball.y + r > 600) { ball.y = 600 - r; ball.vy *= -this.restitution; }
 
-            // Level walls
-            if (level.walls) {
-                for (const wall of level.walls) {
-                    const closestX = Math.max(wall.x, Math.min(ball.x, wall.x + wall.width));
-                    const closestY = Math.max(wall.y, Math.min(ball.y, wall.y + wall.height));
-                    const dx = ball.x - closestX;
-                    const dy = ball.y - closestY;
-                    const distSq = dx * dx + dy * dy;
+            // Auto-Border
+            if (tileMap) {
+                const minX = 0;
+                const minY = 0;
+                const maxX = tileMap.width * 60;
+                const maxY = tileMap.height * 60;
 
-                    if (distSq < r * r && distSq > 0) {
-                        const dist = Math.sqrt(distSq);
-                        const overlap = r - dist;
-                        const nx = dx / dist;
-                        const ny = dy / dist;
+                if (ball.x - r < minX) { ball.x = minX + r; ball.vx *= -this.restitution; }
+                if (ball.x + r > maxX) { ball.x = maxX - r; ball.vx *= -this.restitution; }
+                if (ball.y - r < minY) { ball.y = minY + r; ball.vy *= -this.restitution; }
+                if (ball.y + r > maxY) { ball.y = maxY - r; ball.vy *= -this.restitution; }
+            }
 
-                        ball.x += nx * overlap;
-                        ball.y += ny * overlap;
+            // Grid Walls
+            if (tileMap) {
+                const col = Math.floor(ball.x / 60);
+                const row = Math.floor(ball.y / 60);
 
-                        const dot = ball.vx * nx + ball.vy * ny;
-                        ball.vx = (ball.vx - 2 * dot * nx) * this.restitution;
-                        ball.vy = (ball.vy - 2 * dot * ny) * this.restitution;
+                for (let c = col - 1; c <= col + 1; c++) {
+                    for (let r = row - 1; r <= row + 1; r++) {
+                        const tile = tileMap.getTile(c, r);
+                        if (tile === 'WALL') {
+                            const wall = { x: c * 60, y: r * 60, width: 60, height: 60 };
+                            const closestX = Math.max(wall.x, Math.min(ball.x, wall.x + wall.width));
+                            const closestY = Math.max(wall.y, Math.min(ball.y, wall.y + wall.height));
+                            const dx = ball.x - closestX;
+                            const dy = ball.y - closestY;
+                            const distSq = dx * dx + dy * dy;
+
+                            if (distSq < r * r && distSq > 0) {
+                                const dist = Math.sqrt(distSq);
+                                const overlap = r - dist;
+                                const nx = dx / dist;
+                                const ny = dy / dist;
+
+                                ball.x += nx * overlap;
+                                ball.y += ny * overlap;
+
+                                const dot = ball.vx * nx + ball.vy * ny;
+                                ball.vx = (ball.vx - 2 * dot * nx) * this.restitution;
+                                ball.vy = (ball.vy - 2 * dot * ny) * this.restitution;
+                            }
+                        }
                     }
                 }
             }
