@@ -1,53 +1,75 @@
-# Agent Handoff - Phase 2.6 Complete
+# Agent Handoff - Editor Overhaul & Core Refactoring
 
-## Summary of Work
-I have completed **Phase 2.5 (Coordinate Sync)** and **Phase 2.6 (Global Renderer Audit)**. The primary goal was to resolve visual desyncs between the physics engine and the renderer by enforcing a strict "Golden Rule": **"If it exists in the World, it must pass through the Viewport."**
+**Date:** 2025-12-05
+**Status:** Editor Core Implemented (View/Export/Import/Grid), Tools Pending.
 
-### Completed Features
-1.  **Unified Coordinate System (`Viewport.js`)**:
-    -   Implemented `worldToScreen(worldX, worldY)` as the single source of truth for coordinate transformations.
-    -   All rendering now respects `viewport.zoom` and `viewport.x/y` (camera position).
+## 1. Executive Summary
+We have successfully replaced the legacy `LevelEditor.js` with a new, robust `EditorSystem.js` designed for the "Infinite Grid" architecture. The new system supports non-blocking UI, proper viewport panning (including "void panning"), and a refactored serialization pipeline that respects the `TileMap` data structure.
 
-2.  **Global Renderer Audit (`Renderer.js`)**:
-    -   **Refactored**: `drawBall`, `drawAimLine`, `drawTrail`, `drawWindParticles`, `drawWind`, `drawMover`, `drawBoost`, `drawSwitch`, `drawGate`, and `drawSlopes`.
-    -   **New Methods**:
-        -   `drawHole(level)`: Draws the hole based on physics coordinates (`level.hole`) transformed to screen space.
-        -   `drawHazards(level)`: Draws sand traps using `getScreenRect`.
-        -   `getScreenRect(entity)`: Helper to transform entity bounds to screen space.
-    -   **Bedrock Rendering**: `clear()` now fills the background with `#0f380f` (darkest green), creating a visual "void" outside the playable map.
+## 2. Completed Work
 
-3.  **Physics Debug Overlay**:
-    -   Added `drawPhysicsDebug(ball, tileMap)` (Toggle with **'D'**).
-    -   Visualizes the ball's physics body (Blue Circle) and the 3x3 wall neighborhood (Red Rects) exactly as the physics engine sees them.
-    -   **Fix**: Debug drawing is forced to be the **last** operation in the render loop to ensure visibility.
+### A. Editor Core (`src/editor/EditorSystem.js`)
+- **State Management**: Implemented `enable()` and `disable()` methods to toggle `game.editorMode`.
+- **Input Handling**:
+    - Independent WASD/Arrow Key navigation.
+    - `Shift` for speed boost.
+    - **Void Panning**: Camera is NOT clamped to world bounds in Editor Mode, allowing exploration of the infinite grid.
+- **Grid Rendering**:
+    - Implemented a 60x60 grid overlay.
+    - **Culling**: strictly draws only visible lines based on `Viewport` bounds.
+    - **Correction**: Fixed a critical bug where the grid was too dense by correctly using `viewport.gridToScreen()` and accounting for the Viewport's **Center-based** coordinate system.
 
-4.  **Physics Robustness (`Physics.js`)**:
-    -   Fixed "Tunneling" issue by updating `handleWallCollisions` to check the full range of tiles covered by the ball's radius (`minCol` to `maxCol`), not just the center tile.
+### B. Serialization (`src/editor/LevelSerializer.js`)
+- **Refactored**: Now iterates the `TileMap` (sparse dictionary) to serialize static geometry (Walls, Hazards, Holes).
+- **Metadata**: Added support for `wind` (angle, speed) and `par`.
+- **Entities**: Handles `start`, `slopes`, and generic entities.
+- **Workflow**:
+    - `exportLevel()`: Generates `RP1:...` code and copies to clipboard.
+    - `importLevel()`: Accepts code via prompt and reloads the level immediately.
 
-### Current State
--   **Visuals**: The game is now visually consistent. The "Invisible Hole" bug is fixed. Entities, particles, and the aim line align perfectly with the grid and walls.
--   **Debug**: The 'D' key toggle is functional and reliable (case-insensitive).
--   **Architecture**: `Renderer.js` is strictly decoupled from raw world coordinates.
+### C. UI & Integration
+- **`src/editor/EditorUI.js`**: Created a non-blocking DOM overlay (`#editor-hud`) with "Export", "Import", and "Settings" buttons.
+- **`src/core/Game.js`**:
+    - Added `editorMode` flag.
+    - **Loop Separation**: Skips `physics.update` when editing; calls `editorSystem.update` instead.
+    - **Render Loop**: Calls `editorSystem.draw` after the main scene.
+- **`src/main.js`**: Replaced legacy editor instantiation with `EditorSystem`.
 
-## Known Issues & Redundancies (Context Rich)
+## 3. Challenges & Pitfalls Encountered
 
-### 1. Redundant Rendering Logic
-We now have two ways to draw Holes and Sand, which is a potential source of bugs or double-drawing:
--   **Tile-Based**: `Renderer.drawTile` has cases for `'HOLE'` and `'SAND'`. This iterates the `tileMap`.
--   **Entity-Based**: `Renderer.drawHole` uses `level.hole`, and `Renderer.drawHazards` uses `level.hazards`.
--   **Risk**: If the `tileMap` contains 'HOLE' or 'SAND' tiles *AND* the `level` object has `hole`/`hazards` defined, we are drawing them twice.
--   **Recommendation**: Decide on a single source of truth. If Holes and Hazards are "Entities" (which they seem to be for physics attributes like radius or friction), remove the rendering logic from `drawTile` or ensure the `tileMap` doesn't contain them.
+### A. Coordinate System Mismatch
+**Issue**: The Editor Grid initially rendered incorrectly (too dense).
+**Cause**: The `EditorSystem` assumed `Viewport.x/y` represented the **Top-Left** of the screen.
+**Reality**: `Viewport.x/y` represents the **Center** of the camera in World Space.
+**Fix**: Updated `drawGrid` to calculate bounds using `vp.x - halfWidth` and utilized `vp.gridToScreen()` for all transformations.
+**Lesson**: Always verify the coordinate system of the `Viewport` class before implementing rendering logic.
 
-### 2. Physics Logic Duplication
--   **Issue**: `Physics.simulateTrajectory` manually replicates the logic of `Physics.update` (including the new wall collision logic).
--   **Risk**: If `update` is modified (e.g., friction changes, new forces), `simulateTrajectory` will drift out of sync, causing the aim line to lie to the player.
--   **Recommendation**: Refactor the core physics step into a shared `step(ball, dt)` method that both `update` and `simulateTrajectory` can call.
+### B. Accidental Deletion of Core Methods
+**Issue**: During the integration of `editorMode` into `Game.js`, the `init()`, `loadLevel()`, and other core methods were accidentally deleted, causing a crash (`this.init is not a function`).
+**Fix**: Manually restored the missing methods.
+**Lesson**: Be extremely careful when performing large edits on the "God Class" (`Game.js`). Use `view_file` to verify context before and after edits.
 
-### 3. Infinite Level Rendering
--   **Observation**: `Renderer.drawLevel` currently calculates visible bounds (`minCol` to `maxCol`) to optimize rendering. This is good. However, `drawHazards` and `drawEntities` iterate *all* entities in the level.
--   **Future Optimization**: For truly infinite levels, we will need a spatial partition (e.g., QuadTree or Grid-based lookup) for entities to avoid iterating thousands of off-screen objects every frame.
+### C. Dependency Injection
+**Issue**: `EditorSystem` needs access to `Game`, but `Game` needs to call `EditorSystem`.
+**Solution**: Instantiated `EditorSystem` in `main.js` passing the `game` instance, then attached it back to `game.editorSystem`.
 
-## Next Steps
-1.  **Cleanup**: Address the redundant rendering logic (Tile vs. Entity).
-2.  **UI**: Implement the UI for Inventory and Prediction Mode (as mentioned in previous handoff).
-3.  **Infinite Generation**: Proceed with Phase 3 to implement the procedural level generation.
+## 4. Shortfalls & Next Steps
+
+### A. Missing Tools (Critical)
+The Editor currently allows **Viewing**, **Panning**, **Exporting**, and **Importing**. It does **NOT** yet allow placing or removing tiles.
+- **Next Task**: Implement `Brush` logic (Paint Wall, Paint Sand, Erase).
+- **Next Task**: Implement `Entity Placer` (Place Hole, Start, Slopes).
+
+### B. UI Polish
+- **Import Prompt**: Currently uses `window.prompt()`, which blocks the thread. Needs a proper Modal.
+- **Settings**: The "Settings" button in the Editor HUD is non-functional.
+
+### C. Entity Management
+- Serialization of dynamic entities relies on `currentLevel.entities`. We may need a more robust `EntityManager` to handle creation/deletion of entities during runtime editing.
+
+## 5. Key Files
+- `src/editor/EditorSystem.js`: Core logic.
+- `src/editor/LevelSerializer.js`: Data handling.
+- `src/editor/EditorUI.js`: DOM Overlay.
+- `src/core/Game.js`: Main loop integration.
+- `src/core/Viewport.js`: Coordinate transformations.

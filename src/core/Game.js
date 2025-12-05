@@ -46,6 +46,10 @@ export class Game {
         this.debugMode = false;
         this.showWindArrows = false;
 
+        // Editor Integration
+        this.editorMode = false;
+        this.editorSystem = null;
+
         this.ball = {
             x: 0, y: 0,
             vx: 0, vy: 0,
@@ -192,6 +196,57 @@ export class Game {
             return;
         }
 
+        // --- Rasterize Level to TileMap (Sync Visuals & Physics) ---
+        this.tileMap.clear(); // Ensure we start fresh
+
+        // 1. Rasterize Hole
+        if (level.hole) {
+            const col = Math.floor(level.hole.x / 60);
+            const row = Math.floor(level.hole.y / 60);
+            this.tileMap.setTile(col, row, 'HOLE');
+
+            // SNAP PHYSICS TO GRID CENTER
+            // This ensures the physics interaction matches the tile rendering perfectly.
+            level.hole.x = col * 60 + 30;
+            level.hole.y = row * 60 + 30;
+        }
+
+        // 2. Rasterize Walls
+        if (level.walls) {
+            for (const wall of level.walls) {
+                // Convert rect to tiles
+                const startCol = Math.floor(wall.x / 60);
+                const endCol = Math.floor((wall.x + wall.width - 1) / 60);
+                const startRow = Math.floor(wall.y / 60);
+                const endRow = Math.floor((wall.y + wall.height - 1) / 60);
+
+                for (let c = startCol; c <= endCol; c++) {
+                    for (let r = startRow; r <= endRow; r++) {
+                        this.tileMap.setTile(c, r, 'WALL');
+                    }
+                }
+            }
+        }
+
+        // 3. Rasterize Hazards (Sand)
+        if (level.hazards) {
+            for (const hazard of level.hazards) {
+                const startCol = Math.floor(hazard.x / 60);
+                const endCol = Math.floor((hazard.x + hazard.width - 1) / 60);
+                const startRow = Math.floor(hazard.y / 60);
+                const endRow = Math.floor((hazard.y + hazard.height - 1) / 60);
+
+                for (let c = startCol; c <= endCol; c++) {
+                    for (let r = startRow; r <= endRow; r++) {
+                        // Don't overwrite walls or hole
+                        if (!this.tileMap.getTile(c, r)) {
+                            this.tileMap.setTile(c, r, 'SAND');
+                        }
+                    }
+                }
+            }
+        }
+
         this.ball.x = level.start.x;
         this.ball.y = level.start.y;
         this.ball.vx = 0;
@@ -284,6 +339,12 @@ export class Game {
     }
 
     update(dt) {
+        // Editor Mode: Skip Physics, Update Editor Camera
+        if (this.editorMode) {
+            if (this.editorSystem) this.editorSystem.update(dt);
+            return;
+        }
+
         const level = this.levelManager.getCurrentLevel();
         if (level) {
             this.audio.update(dt); // Update audio engine (gusts)
@@ -365,7 +426,7 @@ export class Game {
         if (level) {
             this.renderer.drawLevel(this.tileMap);
             this.renderer.drawHazards(level); // Draw Hazards (Sand)
-            this.renderer.drawHole(level);    // Draw Hole
+
             this.renderer.drawWindParticles();
 
             if (this.showWindArrows) {
@@ -379,7 +440,7 @@ export class Game {
             this.renderer.drawBall(this.ball); // Draw ball ON TOP
             this.renderer.drawBall(this.ball); // Draw ball ON TOP
 
-            if (!this.ball.isMoving && this.input.isDragging) {
+            if (!this.ball.isMoving && this.input.isDragging && !this.editorMode) {
                 const velocity = this.input.getLaunchVelocity();
                 if (velocity) {
                     if (this.isUsingPrediction) {
@@ -396,6 +457,11 @@ export class Game {
                 const windZones = this.levelManager.getWindZones();
                 this.renderer.drawDebugZones(windZones);
                 this.renderer.drawPhysicsDebug(this.ball, this.tileMap);
+            }
+
+            // Editor Overlay
+            if (this.editorMode && this.editorSystem) {
+                this.editorSystem.draw(this.ctx);
             }
         }
 

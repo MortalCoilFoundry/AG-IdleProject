@@ -169,13 +169,10 @@ export class Renderer {
         }
     }
 
-    drawHole(level) {
-        if (!level.hole) return;
-
-        const hole = level.hole;
-        // Transform World -> Screen (Hole x,y is center)
-        const pos = this.viewport.worldToScreen(hole.x, hole.y);
-        const radius = (hole.radius || 12) * this.viewport.zoom;
+    drawHole(x, y) {
+        // Transform World -> Screen
+        const pos = this.viewport.worldToScreen(x, y);
+        const radius = 12 * this.viewport.zoom;
 
         this.ctx.fillStyle = this.colors.darkest;
         this.ctx.beginPath();
@@ -222,10 +219,9 @@ export class Renderer {
                 this.ctx.fillStyle = this.colors.light; // Grass
                 this.ctx.fillRect(rx, ry, rSize, rSize);
 
-                this.ctx.fillStyle = this.colors.darkest;
-                this.ctx.beginPath();
-                this.ctx.arc(rx + rSize / 2, ry + rSize / 2, rSize / 4, 0, Math.PI * 2);
-                this.ctx.fill();
+                // Draw Hole using the shared method
+                // Tile center in world coordinates
+                this.drawHole(col * 60 + 30, row * 60 + 30);
                 break;
             case 'SAND':
                 this.ctx.fillStyle = this.colors.dark;

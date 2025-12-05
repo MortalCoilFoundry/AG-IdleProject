@@ -1,61 +1,80 @@
 export class LevelSerializer {
 
     // Convert Editor Level -> Compressed JSON -> Base64 String
-    static serialize(levelData) {
+    // Now accepts: tileMap (Grid), entities (Array), metadata (Object: wind, par, etc)
+    static serialize(tileMap, entities, metadata = {}) {
         // 1. Minify Data Structure
         const minified = {
-            w: [], // Walls: array of [x, y]
-            h: [], // Hazards (Sand): array of [x, y]
+            w: [], // Walls: array of [col, row]
+            h: [], // Hazards (Sand): array of [col, row]
             s: [], // Slopes: array of [x, y, vx, vy]
             e: [], // Entities: array of {t: type, x, y, ...params}
             g: null, // Goal/Hole: [x, y]
-            st: null // Start: [x, y]
+            st: null, // Start: [x, y]
+            wi: null, // Wind: {a: angle, s: speed}
+            p: 3 // Par
         };
 
         // Helper to grid-snap
         const toGrid = (val) => Math.round(val / 60);
 
-        // Walls
-        if (levelData.walls) {
-            levelData.walls.forEach(w => {
-                minified.w.push([toGrid(w.x), toGrid(w.y)]);
+        // --- A. Serialize TileMap (Static Geometry) ---
+        // Iterate the sparse map
+        for (const [key, type] of tileMap.tiles) {
+            const [colStr, rowStr] = key.split('_');
+            const col = parseInt(colStr);
+            const row = parseInt(rowStr);
+
+            if (type === 'WALL') {
+                minified.w.push([col, row]);
+            } else if (type === 'SAND') {
+                minified.h.push([col, row]);
+            } else if (type === 'HOLE') {
+                // For the hole, we store the center point in World Space (or Grid Space if preferred)
+                // The RP1 format expects the Hole to be a single point.
+                // We'll calculate the center based on the grid tile.
+                const centerX = col * 60 + 30;
+                const centerY = row * 60 + 30;
+                minified.g = [toGrid(centerX), toGrid(centerY)];
+            }
+        }
+
+        // --- B. Serialize Entities (Dynamic Objects) ---
+        if (entities) {
+            entities.forEach(e => {
+                // Slopes are currently stored as entities in the level object, 
+                // but might be moved to TileMap later. For now, assume they are in the entities list 
+                // OR passed separately. The previous serializer handled 'slopes' array.
+                // Let's assume 'entities' contains everything NOT in the TileMap.
+
+                // However, the Game.js rasterizer separates them. 
+                // We need to handle 'slopes' if they are passed in 'entities' or a separate list.
+                // For this implementation, we'll assume 'entities' is a flat list of non-grid objects.
+
+                if (e.type === 'slope') {
+                    minified.s.push([toGrid(e.x), toGrid(e.y), e.vx, e.vy]);
+                } else if (e.type === 'start') {
+                    minified.st = [toGrid(e.x), toGrid(e.y)];
+                } else {
+                    // Generic Entity
+                    const ent = { t: e.type, x: toGrid(e.x), y: toGrid(e.y) };
+                    if (e.vx !== undefined) ent.vx = e.vx;
+                    if (e.vy !== undefined) ent.vy = e.vy;
+                    // Add other specific props
+                    if (e.id) ent.id = e.id;
+                    if (e.targetId) ent.tid = e.targetId;
+
+                    minified.e.push(ent);
+                }
             });
         }
 
-        // Hazards
-        if (levelData.hazards) {
-            levelData.hazards.forEach(h => {
-                minified.h.push([toGrid(h.x), toGrid(h.y)]);
-            });
+        // --- C. Metadata ---
+        if (metadata.wind) {
+            minified.wi = { a: metadata.wind.angle, s: metadata.wind.speed };
         }
-
-        // Slopes
-        if (levelData.slopes) {
-            levelData.slopes.forEach(s => {
-                // Keep vx/vy as raw floats
-                minified.s.push([toGrid(s.x), toGrid(s.y), s.vx, s.vy]);
-            });
-        }
-
-        // Entities
-        if (levelData.entities) {
-            levelData.entities.forEach(e => {
-                const ent = { t: e.type, x: toGrid(e.x), y: toGrid(e.y) };
-                // Add other params if needed, for now just basic props
-                if (e.vx !== undefined) ent.vx = e.vx;
-                if (e.vy !== undefined) ent.vy = e.vy;
-                minified.e.push(ent);
-            });
-        }
-
-        // Goal (Hole)
-        if (levelData.hole) {
-            minified.g = [toGrid(levelData.hole.x), toGrid(levelData.hole.y)];
-        }
-
-        // Start
-        if (levelData.start) {
-            minified.st = [toGrid(levelData.start.x), toGrid(levelData.start.y)];
+        if (metadata.par) {
+            minified.p = metadata.par;
         }
 
         // 2. Stringify & Encode
@@ -89,7 +108,8 @@ export class LevelSerializer {
                 entities: [],
                 hole: null,
                 start: null,
-                par: 3 // Default par
+                par: minified.p || 3,
+                wind: null
             };
 
             if (minified.w) {
@@ -107,7 +127,8 @@ export class LevelSerializer {
                     width: 60,
                     height: 60,
                     vx: p[2],
-                    vy: p[3]
+                    vy: p[3],
+                    type: 'slope'
                 }));
             }
 
@@ -116,6 +137,8 @@ export class LevelSerializer {
                     const ent = { type: e.t, x: toWorld(e.x), y: toWorld(e.y), width: 60, height: 60 };
                     if (e.vx !== undefined) ent.vx = e.vx;
                     if (e.vy !== undefined) ent.vy = e.vy;
+                    if (e.id) ent.id = e.id;
+                    if (e.tid) ent.targetId = e.tid;
                     return ent;
                 });
             }
@@ -126,6 +149,10 @@ export class LevelSerializer {
 
             if (minified.st) {
                 level.start = { x: toWorld(minified.st[0]), y: toWorld(minified.st[1]) };
+            }
+
+            if (minified.wi) {
+                level.wind = { angle: minified.wi.a, speed: minified.wi.s };
             }
 
             return level;

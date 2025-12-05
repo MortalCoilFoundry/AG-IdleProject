@@ -25,9 +25,10 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Initialize Editor
     // Dynamic import would be better for code splitting, but static is fine for now
-    import('./editor/LevelEditor.js').then(module => {
-        const LevelEditor = module.LevelEditor;
-        const levelEditor = new LevelEditor(game);
+    import('./editor/EditorSystem.js').then(module => {
+        const EditorSystem = module.EditorSystem;
+        const editorSystem = new EditorSystem(game);
+        game.editorSystem = editorSystem; // Attach to game for draw loop
 
         // Ribbon Logic
         const bottomRibbon = document.getElementById('bottom-ribbon');
@@ -44,13 +45,12 @@ window.addEventListener('DOMContentLoaded', () => {
                     courseModal.open();
                     game.audio.playUiBlip();
                 } else if (section === 'editor') {
-                    if (levelEditor.enabled) {
-                        levelEditor.disable();
+                    if (editorSystem.enabled) {
+                        editorSystem.disable();
                         btn.classList.remove('active'); // Optional visual feedback
                     } else {
-                        levelEditor.enable();
+                        editorSystem.enable();
                         btn.classList.add('active'); // Optional visual feedback
-                        alert("Editor Mode Enabled!\nCtrl+S: Export Level Code\nCtrl+L: Import Level Code");
                     }
                     game.audio.playUiBlip();
                 }
