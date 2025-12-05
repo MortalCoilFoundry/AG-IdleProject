@@ -5,6 +5,7 @@ import { Input } from '../input/Input.js';
 import { LevelManager } from '../levels/LevelManager.js';
 import { AudioController } from '../audio/Audio.js';
 import { ParticleSystem } from '../graphics/Particles.js';
+import { PlayerState } from './PlayerState.js';
 
 export class Game {
     constructor() {
@@ -25,6 +26,9 @@ export class Game {
         this.levelManager = new LevelManager();
         this.audio = new AudioController();
         this.particles = new ParticleSystem();
+        this.playerState = new PlayerState();
+
+        this.isUsingPrediction = false;
 
         this.ball = {
             x: 0, y: 0,
@@ -51,6 +55,13 @@ export class Game {
 
         eventBus.on('STROKE_TAKEN', () => {
             this.strokes++;
+
+            if (this.isUsingPrediction) {
+                this.playerState.useItem('prediction');
+                this.isUsingPrediction = false; // Reset for next shot
+                console.log(`Prediction Used. Remaining: ${this.playerState.getItemCount('prediction')}`);
+            }
+
             this.updateUI();
             this.audio.playHit();
             this.particles.emit(this.ball.x, this.ball.y, '#9bbc0f', 10, 5); // Burst on shoot
@@ -120,6 +131,19 @@ export class Game {
         window.addEventListener('keydown', (e) => {
             if (e.key === 'd') this.debugMode = !this.debugMode;
             if (e.key === 'w') this.showWindArrows = !this.showWindArrows;
+            if (e.key === 'p' || e.key === 'P') {
+                if (this.isUsingPrediction) {
+                    this.isUsingPrediction = false;
+                    console.log("Prediction Mode OFF");
+                } else {
+                    if (this.playerState.hasItem('prediction')) {
+                        this.isUsingPrediction = true;
+                        console.log(`Prediction Mode ON (Charges: ${this.playerState.getItemCount('prediction')})`);
+                    } else {
+                        console.log("No Prediction Charges Left!");
+                    }
+                }
+            }
         });
 
 
@@ -515,8 +539,12 @@ export class Game {
             if (!this.ball.isMoving && this.input.isDragging) {
                 const velocity = this.input.getLaunchVelocity();
                 if (velocity) {
-                    const trajectory = this.physics.simulateTrajectory(this.ball, velocity, level);
-                    this.renderer.drawAimLine(this.ball, trajectory);
+                    if (this.isUsingPrediction) {
+                        const trajectory = this.physics.simulateTrajectory(this.ball, velocity, level);
+                        this.renderer.drawAimLine(this.ball, trajectory);
+                    } else {
+                        this.renderer.drawBasicAimLine(this.ball, velocity);
+                    }
                 }
             }
         }

@@ -349,6 +349,36 @@ export class Renderer {
         this.ctx.restore();
     }
 
+    drawBasicAimLine(ball, velocity) {
+        if (!velocity || (velocity.vx === 0 && velocity.vy === 0)) return;
+
+        const scale = 7.0;
+        const maxLen = 150;
+
+        let dx = velocity.vx * scale;
+        let dy = velocity.vy * scale;
+
+        // Clamp length
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len > maxLen) {
+            const ratio = maxLen / len;
+            dx *= ratio;
+            dy *= ratio;
+        }
+
+        this.ctx.save();
+        this.ctx.strokeStyle = this.colors.lightest;
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([5, 5]);
+
+        this.ctx.beginPath();
+        this.ctx.moveTo(ball.x, ball.y);
+        this.ctx.lineTo(ball.x + dx, ball.y + dy);
+        this.ctx.stroke();
+
+        this.ctx.restore();
+    }
+
     initWindEmitters(zones) {
         this.windZones = zones.map(z => ({
             ...z,

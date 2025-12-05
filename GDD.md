@@ -1,132 +1,106 @@
-# Retro Putt: Green Pocket - Game Design Document
+# Retro Putt: Green Pocket - Game Design Document (v2.0)
 
 ## 1. Project Overview
-**Concept**: Top-down, 2D golf physics puzzle game.
-**Aesthetic**: Game Boy Retro (GBR) style.
-**Resolution**: 600x600 (Canvas).
-**Palette**:
-- Darkest: `#0f380f` (Walls/UI/Text)
-- Dark: `#306230` (Shadows/Hazards/Particles)
-- Light: `#8bac0f` (Grass/Background)
-- Lightest: `#9bbc0f` (Ball/Highlight)
+* **Concept**: Top-down, 2D golf physics puzzle game where "simulation physics" meets "Game Boy aesthetics."
+* **Core Loop**: Putt -> Earn Currency/Stars -> Upgrade/Restock -> Unlock Courses.
+* **Aesthetic**: Game Boy Retro (GBR) style.
+* **Resolution**:
+    * **Logical**: 600x600 (The World/Grid).
+    * **Viewport**: 540x540 (The Camera Window).
+* **Palette (Strict 4-Color)**:
+    * `#0f380f` (Darkest: Walls, UI Text, Outlines)
+    * `#306230` (Dark: Shadows, Sand, Particles)
+    * `#8bac0f` (Light: Grass, UI Backgrounds)
+    * `#9bbc0f` (Lightest: Ball, Highlights, Aim Line)
 
-## 2. Core Mechanics
+## 2. Core Mechanics: The "Feel"
+### 2.1 Movement Physics (Simulation)
+* **Linear Drag**: Friction is applied via **Subtractive Logic** (`speed - constant`), not multiplicative decay. This ensures the ball comes to a true "Zero" stop.
+    * *Grass*: 0.03 drag/frame.
+    * *Sand*: 0.15 drag/frame (Heavy penalty).
+* **The "Sticky" Threshold**: To prevent infinite sliding on gentle slopes, the ball applies **Static Friction** logic:
+    * IF `speed < 0.1` AND `external_force < 0.08` -> Ball Stops.
+    * *Exception*: Gravity Wells (Holes) override this to allow slow drops.
 
-## 3. Architecture (Event-Driven)
-The game uses a global `EventBus` to manage state transitions:
-- `STROKE_TAKEN`: Input released -> Increment strokes, lock input, play sound, emit particles.
-- `BALL_STOPPED`: Velocity threshold met -> Unlock input, enable aim line.
-- `WALL_HIT`: Collision detected -> Play sound, emit particles, shake screen.
-- `SAND_ENTER`: Hazard overlap -> Emit particles.
-- `HOLE_REACHED`: Gravity well success -> Play sound, emit particles, trigger `LEVEL_COMPLETE`.
+### 2.2 Environmental Forces
+* **Slopes**: Defined as vector fields. Visually represented by "Flowing Arrows" overlay.
+    * *Tiers*: Gentle (0.05), Moderate (0.1), Steep (0.15).
+* **Wind**: Defined as AABB zones.
+    * **Scalar Rule**: Wind force is dampened by a `0.03` scalar to create a "drifting" breeze rather than a jet engine boost.
+    * **Terminal Velocity**: Drag vs. Wind naturally creates a top speed cap.
 
-## 4. Levels
-1.  **The Green**: Open field. Teaches input. PAR 2.
-2.  **The Bank**: Central obstacle. Teaches wall bouncing. PAR 3.
-3.  **The Trap**: Large sand hazard. Teaches friction management. PAR 3.
+### 2.3 Hole Interaction (Rim Physics)
+The hole is not a binary trigger. It has three distinct zones based on distance and speed:
+1.  **Capture Zone** (Center + Slow): Ball drops in. Success.
+2.  **Rim Zone** (Edge + Fast):
+    * *Visual*: Ball deflects sharply towards center (Orbital curve).
+    * *Physics*: Velocity dampened by `0.9` (Impact energy loss).
+    * *Audio*: "Tock" sound (Lip-out).
+    * *Result*: Ball rattles and likely pops out unless angle is perfect.
+3.  **Ignore Zone** (Far): No effect.
 
-# Retro Putt: Green Pocket - Game Design Document
+### 2.4 Aiming Systems
+* **Basic Aim (Default)**:
+    * A static, dashed line showing **Launch Power** only.
+    * Ignores Wind, Slopes, and Drag.
+* **Predictive Chip (Consumable Power-Up)**:
+    * **Activation**: Toggle via 'P' key or UI. Charge consumed on `STROKE_TAKEN`.
+    * **Simulation**: Runs a 180-frame "Dry Run" of the physics engine.
+    * **Visuals**: "Breadcrumbs" (dots) that show the true curved path, plus a "Ghost Ball" at the resting coordinates.
+    * **Animation**: "Retro Marquee" effect (dots flash in a traveling wave).
 
-## 1. Project Overview
-**Concept**: Top-down, 2D golf physics puzzle game.
-**Aesthetic**: Game Boy Retro (GBR) style.
-**Resolution**: 600x600 (Canvas).
-**Palette**:
-- Darkest: `#0f380f` (Walls/UI/Text)
-- Dark: `#306230` (Shadows/Hazards/Particles)
-- Light: `#8bac0f` (Grass/Background)
-- Lightest: `#9bbc0f` (Ball/Highlight)
+## 3. Architecture & Data
+### 3.1 Event-Driven Core
+Systems are decoupled via a global `EventBus`.
+* `STROKE_TAKEN`: Input released -> Increment strokes, Inventory consumes 'Prediction Chip', Lock Input.
+* `HOLE_LIP`: Collision detected -> Play "Rim Rattle", Emit Particles.
+* `BALL_STOPPED`: Threshold met -> Unlock input, Camera re-centers.
 
-## 2. Core Mechanics
-### Physics
-- **Input**: Slingshot (Drag & Release). Power clamped to max length.
-- **Predictive Aim**:
-  - **Simulation**: "Dry run" of physics engine (180 frames) accounting for Drag, Wind, and Slopes.
-  - **Visuals**: "Breadcrumb" trail (dots) showing path + "Ghost Ball" showing final resting position.
-### Test Chamber (Sandbox)
-A dedicated debugging level (`TestChamber.js`) accessible via the Course Select menu.
-- **Purpose**: Rapid prototyping of mechanics (Wind, Slopes, Hazards) without altering campaign levels.
-- **Features**: Infinite loop (reloads itself on completion), contains entity types for testing.
+### 3.2 PlayerState (The Bank)
+A Singleton class managing persistent data (`localStorage: retro-putt-profile`).
+* **Inventory**: Tracks consumables (e.g., `{ prediction: 5 }`).
+* **Currency**: Coins collected during gameplay.
+* **Progress**: Stars earned per level (Max 3 stars based on PAR).
+* **Unlock State**: Which courses are available.
 
-## 5. Polish & Juice (Implemented)
-- **Visuals**:
-  - **Scanlines**: CSS overlay for LCD effect.
-  - **Font**: "Press Start 2P" (Google Fonts).
-  - **Particles**: Square debris on shots, wall hits, and hole-ins.
-  - **Screen Shake**: Camera offset applied on wall impacts.
-  - **Sand Texture**: Procedural noise (speckles) added to hazards for grit.
-  - **Ball Stop**: "Puff" of dark green particles (`#306230`) emitted when the ball settles.
-- **Audio Architecture**:
-  - **Buses**: 5-channel mixing board (`master`, `music`, `ambience`, `ui`, `sfx`) via Web Audio API `GainNodes`.
-  - **Routing**:
-    - `sfx`: Tones, hits, wall bounces.
-    - `ambience`: Procedural wind, pink noise floor.
-    - `ui`: Blips, clicks.
-  - **Persistence**: Volume settings saved to `localStorage` (`retro-putt-settings`).
-  - **Feedback**: Interactive audio previews when adjusting volume (blips, chords, noise bursts).
+### 3.3 The Camera (Clamped Follow)
+* **Dead Zone**: The 60px difference between Logical World (600) and Viewport (540).
+* **Behavior**: Camera strictly follows the ball but clamps to `(0, 600)`, ensuring no "black void" is ever seen outside level bounds.
 
-## 6. User Interface & Display
-### Pixel-Perfect Letterboxing
-- **Logical Resolution**: 600x600 buffer.
-- **Viewport**: 540x540 visible gameplay area, centered within the logical world (Offset: 30, 60).
-- **Rendering**:
-  - `Renderer.js` clips drawing to the viewport and translates the origin.
-  - CSS enforces `image-rendering: pixelated` for crisp 1:1 pixels.
-- **Layout**:
-  - Responsive container (`#game-container`) sized to `min(100vw, 100vh - 120px)`.
-  - Fixed top/bottom ribbons (60px height) cover the "dead zones" of the logical world.
+### 3.4 Level Serialization ("Share Codes")
+* **Format**: Base64 encoded JSON with a version prefix (`RP1:`).
+* **Compression**: Coordinates are divided by 60 (Grid Size) to save space.
+* **Usage**: Used for Level Editor export/import and defining Campaign levels in `Levels.js`.
 
-### Camera System
-- **Concept**: Clamped Follow.
-- **Problem**: The logical world is 600x600, but the visible viewport is only 540x540.
-- **Solution**: A camera tracks the ball to keep it centered within the viewport, allowing the player to explore the full level.
-- **Constraints**:
-  - **Clamping**: The camera is clamped to the world bounds (0-600) so the player never sees "outside" the level.
-  - **Pixel-Perfect**: No scaling is used. The view is a 1:1 window into the larger world.
-- **Implementation**:
-  - `Renderer.js`: Applies a translation `(-cameraX, -cameraY)` before drawing the world.
-  - `Game.js`: Updates `cameraX/Y` every frame based on ball position.
-  - `Input.js`: Adds `cameraX/Y` to mouse coordinates to map screen clicks to the scrolling world.
+## 4. UI & Polish
+* **Ribbon UI**: HTML overlays (`z-index: 20`) frame the canvas (Top: Stats, Bottom: Navigation).
+* **Modals**: Slide-up HTML panels for Settings and Course Selection.
+* **Audio**:
+    * **Dynamic Mixing**: 5-channel bus (`sfx`, `ambience`, `music`, `ui`, `master`).
+    * **Feedback**: UI elements "Blip" or "Click" on interaction.
+* **Juice**:
+    * **Particles**: Grass divots on stop, sparkles on hole-in.
+    * **Screen Shake**: Subtlety applied on Wall Hits (Directional).
 
-### Input System
-- **Global Handling**: Listeners attached to `window` to capture input across the entire screen, including ribbons.
-- **Coordinate Mapping**:
-  - Input coordinates are scaled from display size to logical size (600x600).
-  - **Offset Correction**: Coordinates are shifted by (-30, -60) to align with the rendered viewport.
-- **Robustness**:
-  - Clamped to logical bounds (0-600).
-  - Ignores clicks on UI buttons.
-  - `touch-action: none` prevents scrolling on mobile.
+## 5. Content Roadmap
+### 5.1 The Level Editor (Priority: High)
+* **Goal**: Move away from code-based level definitions.
+* **Features**:
+    * Grid-Snapping (60px).
+    * "Paint" terrain types (Wall, Sand, Water).
+    * Place Entities (Hole, Start, Slopes, Wind).
+    * **Serialization**: Export/Import via "Share Codes".
 
-#### Feature: Mobile-First Retro Ribbon UI + Modal System
-**Status**: Implemented (Core + Settings Module)
-**Architecture**:
-- **DOM Overlay**: All UI exists in HTML/CSS above the canvas (`z-index: 20+`).
-- **Ribbons**: Fixed top/bottom bars (60px) framing the 540x540 viewport.
-- **Modal System**:
-  - **Container**: `#modal-container` slides up from bottom (CSS transition).
-  - **Overlay**: `#modal-overlay` provides dimming and click-to-dismiss.
-  - **Dynamic Content**: `SettingsModal.js` injects HTML into the container on demand.
+### 5.2 The "Pro Shop" (Priority: Medium)
+* **Concept**: A new Modal tab.
+* **Exchange**: Spend earned **Coins** or **Stars**.
+* **Goods**:
+    * Refill "Predictive Chips."
+    * Unlock "Ball Skins" (e.g., 8-ball, Cube, Eyeball).
 
-**Implemented Modules**:
-1.  **Settings Modal**:
-    - **Retro Meter**: Custom volume control using 10 `<div>` blocks instead of sliders.
-    - **Interaction**: `<` and `>` buttons with immediate visual/audio feedback.
-    - **Visuals**: Pixel-perfect styling, "lit" vs "unlit" blocks using GBR palette.
-
-**UI Layout**:
-```text
-+--------------------------------------------------+
-|   [≡]  Retro Putt         ★ 3   PAR 3   ○ 2     |  ← Top Ribbon
-+--------------------------------------------------+
-|                                                  |
-|               [gameplay area 540×540]            |
-|                                                  |
-+--------------------------------------------------+
-|   <  Courses  |  Balls  |  Settings  |  Editor >|  ← Bottom Ribbon
-+--------------------------------------------------+
-```
-**Interaction Flow**:
-- Tap "Settings" -> Modal slides up.
-- Tap `<` on SFX -> SFX volume lowers, blocks update, "Blip" plays.
-- Tap "Back" or Overlay -> Modal slides down.
+### 5.3 Campaign Structure
+* **Target**: 18 Levels total.
+* **Progression**:
+    * **Course 1 (The Green)**: Levels 1-6 (Basics).
+    * **Course 2 (The Dunes)**: Levels 7-12 (Sand & Wind focus).
+    * **Course 3 (The Peak)**: Levels 13-18 (Slopes & Precision focus).
