@@ -308,8 +308,8 @@ export class Renderer {
                 for (let y = -gridY; y < slope.height + gridY; y += gridY) {
 
                     // Calculate raw position with offset (World Space)
-                    let worldDrawX = slope.x + x + offsetX;
-                    let worldDrawY = slope.y + y + offsetY;
+                    let worldDrawX = slope.x + x + offsetX + 30;
+                    let worldDrawY = slope.y + y + offsetY + 30;
 
                     // Transform to Screen Space
                     const screenPos = this.viewport.worldToScreen(worldDrawX, worldDrawY);

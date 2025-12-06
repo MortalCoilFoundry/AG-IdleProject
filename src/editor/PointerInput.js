@@ -214,6 +214,14 @@ export class PointerInput {
             tileMap.setTile(col, row, 'SAND');
         } else if (tool === TOOLS.ERASER) {
             tileMap.setTile(col, row, null);
+            // Also remove slopes/holes if they exist there
+            // TODO: Clean up level.slopes if erasing a slope
+        } else if (tool === TOOLS.START) {
+            this.editor.handleStartTool(col, row);
+        } else if (tool === TOOLS.HOLE) {
+            this.editor.handleHoleTool(col, row);
+        } else if (tool === TOOLS.SLOPE) {
+            this.editor.handleSlopeTool(col, row);
         }
     }
 

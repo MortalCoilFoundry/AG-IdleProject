@@ -23,9 +23,98 @@ export class EditorSystem {
         this.currentTool = TOOLS.HAND;
         this.tools = TOOLS;
 
+        // Tool Settings
+        this.slopeIntensityIndex = 0;
+        this.SLOPE_INTENSITIES = [0.05, 0.10, 0.15];
+
         // Bindings
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handleKeyUp = this.handleKeyUp.bind(this);
+    }
+
+    cycleSlopeIntensity() {
+        this.slopeIntensityIndex = (this.slopeIntensityIndex + 1) % this.SLOPE_INTENSITIES.length;
+        console.log(`Slope Placement Intensity: ${this.SLOPE_INTENSITIES[this.slopeIntensityIndex]}`);
+        return this.slopeIntensityIndex + 1; // Return 1-based index for UI
+    }
+
+    // ... (existing methods) ...
+
+    handleSlopeTool(col, row) {
+        const level = this.game.levelManager.getCurrentLevel();
+        if (!level) return;
+
+        // Initialize slopes array if missing
+        if (!level.slopes) level.slopes = [];
+
+        // Check if slope exists at this tile
+        const existingIndex = level.slopes.findIndex(s =>
+            Math.floor(s.x / 60) === col && Math.floor(s.y / 60) === row
+        );
+
+        const DIRECTIONS = [
+            { vx: 0, vy: -1, type: 'SLOPE_NORTH' },
+            { vx: 1, vy: -1, type: 'SLOPE_NE' },
+            { vx: 1, vy: 0, type: 'SLOPE_EAST' },
+            { vx: 1, vy: 1, type: 'SLOPE_SE' },
+            { vx: 0, vy: 1, type: 'SLOPE_SOUTH' },
+            { vx: -1, vy: 1, type: 'SLOPE_SW' },
+            { vx: -1, vy: 0, type: 'SLOPE_WEST' },
+            { vx: -1, vy: -1, type: 'SLOPE_NW' }
+        ];
+
+        // Intensity Levels (Use Class Property)
+        const INTENSITIES = this.SLOPE_INTENSITIES;
+
+        if (existingIndex !== -1) {
+            const currentSlope = level.slopes[existingIndex];
+
+            // Calculate current normalized direction and magnitude
+            const mag = Math.sqrt(currentSlope.vx * currentSlope.vx + currentSlope.vy * currentSlope.vy);
+            const normVx = Math.round(currentSlope.vx / mag) || 0;
+            const normVy = Math.round(currentSlope.vy / mag) || 0;
+
+            if (this.keys.Shift) {
+                // --- SHIFT CLICK: Cycle Intensity (Edit Existing) ---
+                let currentIntIndex = INTENSITIES.findIndex(i => Math.abs(i - mag) < 0.01);
+                if (currentIntIndex === -1) currentIntIndex = 0;
+
+                const nextInt = INTENSITIES[(currentIntIndex + 1) % INTENSITIES.length];
+
+                currentSlope.vx = normVx * nextInt;
+                currentSlope.vy = normVy * nextInt;
+            } else {
+                // --- NORMAL CLICK: Cycle Direction ---
+                let currentDirIndex = DIRECTIONS.findIndex(d => d.vx === normVx && d.vy === normVy);
+                if (currentDirIndex === -1) currentDirIndex = 0;
+
+                const nextDir = DIRECTIONS[(currentDirIndex + 1) % DIRECTIONS.length];
+
+                // Keep current intensity (or should we reset to tool default? Let's keep current to be nice)
+                currentSlope.vx = nextDir.vx * mag;
+                currentSlope.vy = nextDir.vy * mag;
+                currentSlope.type = nextDir.type;
+
+                this.game.tileMap.setTile(col, row, nextDir.type);
+            }
+        } else {
+            // --- NEW SLOPE ---
+            // Default: North, Selected Intensity
+            const dir = DIRECTIONS[0]; // North
+            const intensity = INTENSITIES[this.slopeIntensityIndex];
+
+            level.slopes.push({
+                x: col * 60,
+                y: row * 60,
+                width: 60,
+                height: 60,
+                vx: dir.vx * intensity,
+                vy: dir.vy * intensity,
+                type: 'slope'
+            });
+
+            this.game.tileMap.setTile(col, row, dir.type);
+        }
     }
 
     handleKeyDown(e) {
@@ -215,8 +304,134 @@ export class EditorSystem {
 
     // --- Actions ---
 
+    // --- Actions ---
+
+    handleStartTool(col, row) {
+        const level = this.game.levelManager.getCurrentLevel();
+        if (!level) return;
+
+        // Update Level Data
+        level.start = { x: col * 60 + 30, y: row * 60 + 30 };
+
+        // Update Live Ball Position (Visual Feedback)
+        this.game.ball.x = level.start.x;
+        this.game.ball.y = level.start.y;
+        this.game.ball.vx = 0;
+        this.game.ball.vy = 0;
+        this.game.ball.isMoving = false;
+    }
+
+    handleHoleTool(col, row) {
+        const level = this.game.levelManager.getCurrentLevel();
+        if (!level) return;
+
+        // 1. Remove old hole from TileMap
+        if (level.hole) {
+            const oldCol = Math.floor(level.hole.x / 60);
+            const oldRow = Math.floor(level.hole.y / 60);
+            if (this.game.tileMap.getTile(oldCol, oldRow) === 'HOLE') {
+                this.game.tileMap.setTile(oldCol, oldRow, null);
+            }
+        }
+
+        // 2. Set new hole
+        level.hole = { x: col * 60 + 30, y: row * 60 + 30, radius: 15 };
+        this.game.tileMap.setTile(col, row, 'HOLE');
+    }
+
+    handleSlopeTool(col, row) {
+        const level = this.game.levelManager.getCurrentLevel();
+        if (!level) return;
+
+        // Initialize slopes array if missing
+        if (!level.slopes) level.slopes = [];
+
+        // Check if slope exists at this tile
+        const existingIndex = level.slopes.findIndex(s =>
+            Math.floor(s.x / 60) === col && Math.floor(s.y / 60) === row
+        );
+
+        const DIRECTIONS = [
+            { vx: 0, vy: -1, type: 'SLOPE_NORTH' },
+            { vx: 1, vy: -1, type: 'SLOPE_NE' },
+            { vx: 1, vy: 0, type: 'SLOPE_EAST' },
+            { vx: 1, vy: 1, type: 'SLOPE_SE' },
+            { vx: 0, vy: 1, type: 'SLOPE_SOUTH' },
+            { vx: -1, vy: 1, type: 'SLOPE_SW' },
+            { vx: -1, vy: 0, type: 'SLOPE_WEST' },
+            { vx: -1, vy: -1, type: 'SLOPE_NW' }
+        ];
+
+        // Intensity Levels (Use Class Property)
+        const INTENSITIES = this.SLOPE_INTENSITIES;
+
+        if (existingIndex !== -1) {
+            const currentSlope = level.slopes[existingIndex];
+
+            // Calculate current normalized direction and magnitude
+            const mag = Math.sqrt(currentSlope.vx * currentSlope.vx + currentSlope.vy * currentSlope.vy);
+            const normVx = Math.round(currentSlope.vx / mag) || 0; // Handle 0 safely
+            const normVy = Math.round(currentSlope.vy / mag) || 0;
+
+            if (this.keys.Shift) {
+                // --- SHIFT CLICK: Cycle Intensity ---
+                // Find current intensity index
+                let currentIntIndex = INTENSITIES.findIndex(i => Math.abs(i - mag) < 0.01);
+                if (currentIntIndex === -1) currentIntIndex = 0; // Default to lowest
+
+                // Cycle to next intensity
+                const nextInt = INTENSITIES[(currentIntIndex + 1) % INTENSITIES.length];
+
+                // Update existing slope in place
+                currentSlope.vx = normVx * nextInt;
+                currentSlope.vy = normVy * nextInt;
+
+                console.log(`Slope Intensity Updated: ${nextInt}`);
+            } else {
+                // --- NORMAL CLICK: Cycle Direction ---
+                // Find current direction index
+                let currentDirIndex = DIRECTIONS.findIndex(d => d.vx === normVx && d.vy === normVy);
+                if (currentDirIndex === -1) currentDirIndex = 0;
+
+                // Cycle to next direction
+                const nextDir = DIRECTIONS[(currentDirIndex + 1) % DIRECTIONS.length];
+
+                // Keep current intensity
+                currentSlope.vx = nextDir.vx * mag;
+                currentSlope.vy = nextDir.vy * mag;
+                currentSlope.type = nextDir.type; // Update type string for TileMap
+
+                // Update TileMap
+                this.game.tileMap.setTile(col, row, nextDir.type);
+                console.log(`Slope Direction Updated: ${nextDir.type}`);
+            }
+        } else {
+            // --- NEW SLOPE ---
+            // Default: North, Selected Intensity
+            const dir = DIRECTIONS[0]; // North
+            const intensity = INTENSITIES[this.slopeIntensityIndex];
+
+            level.slopes.push({
+                x: col * 60,
+                y: row * 60,
+                width: 60,
+                height: 60,
+                vx: dir.vx * intensity,
+                vy: dir.vy * intensity,
+                type: 'slope' // Generic entity type
+            });
+
+            // Update TileMap (Physics)
+            this.game.tileMap.setTile(col, row, dir.type);
+            console.log("New Slope Created");
+        }
+    }
+
     exportLevel() {
         // Gather Data
+        const currentLevel = this.game.levelManager.getCurrentLevel(); // FIX: Get reference
+        if (!currentLevel) return null;
+
         const tileMap = this.game.tileMap;
 
         // Combine all non-grid entities
@@ -224,14 +439,7 @@ export class EditorSystem {
         if (currentLevel.entities) entities = entities.concat(currentLevel.entities);
         if (currentLevel.slopes) entities = entities.concat(currentLevel.slopes);
 
-        // Add Start Position as a pseudo-entity for serialization if needed, 
-        // or handle it in the serializer. The serializer expects 'st' separately usually,
-        // but let's check our updated serializer.
-        // Updated serializer looks for 'st' in the 'levelData' passed to it? 
-        // Wait, I updated the serializer to take (tileMap, entities, metadata).
-        // And inside it checks 'entities' for type 'start'.
-
-        // Let's make sure we pass the start position correctly.
+        // Add Start Position as a pseudo-entity for serialization
         if (currentLevel.start) {
             entities.push({ type: 'start', x: currentLevel.start.x, y: currentLevel.start.y });
         }

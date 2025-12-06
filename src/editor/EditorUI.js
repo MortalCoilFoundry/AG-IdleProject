@@ -96,6 +96,9 @@ export class EditorUI {
         this.createToolButton(toolbar, TOOLS.WALL, '🧱');
         this.createToolButton(toolbar, TOOLS.SAND, '🏜️');
         this.createToolButton(toolbar, TOOLS.ERASER, '🧼');
+        this.createToolButton(toolbar, TOOLS.START, '📍');
+        this.createToolButton(toolbar, TOOLS.HOLE, '⛳');
+        this.createToolButton(toolbar, TOOLS.SLOPE, '↗️');
 
         this.container.appendChild(toolbar);
 
@@ -146,7 +149,6 @@ export class EditorUI {
 
     createToolButton(parent, tool, icon) {
         const btn = document.createElement('button');
-        btn.textContent = icon;
         btn.style.width = '44px';
         btn.style.height = '44px';
         btn.style.backgroundColor = '#8bac0f';
@@ -158,10 +160,38 @@ export class EditorUI {
         btn.style.display = 'flex';
         btn.style.alignItems = 'center';
         btn.style.justifyContent = 'center';
+        btn.style.position = 'relative'; // For absolute children
+
+        // Icon
+        const iconSpan = document.createElement('span');
+        iconSpan.textContent = icon;
+        btn.appendChild(iconSpan);
+
+        // Intensity Indicator (Specific to SLOPE)
+        let indicator = null;
+        if (tool === TOOLS.SLOPE) {
+            indicator = document.createElement('span');
+            indicator.textContent = '1';
+            indicator.style.position = 'absolute';
+            indicator.style.top = '2px';
+            indicator.style.left = '4px';
+            indicator.style.fontSize = '10px';
+            indicator.style.fontWeight = 'bold';
+            indicator.style.color = '#0f380f';
+            btn.appendChild(indicator);
+        }
 
         btn.addEventListener('click', () => {
-            this.editor.setTool(tool);
-            this.updateActiveTool(tool);
+            if (this.editor.currentTool === tool) {
+                // Already active - check for secondary action
+                if (tool === TOOLS.SLOPE) {
+                    const newLevel = this.editor.cycleSlopeIntensity();
+                    if (indicator) indicator.textContent = newLevel;
+                }
+            } else {
+                this.editor.setTool(tool);
+                this.updateActiveTool(tool);
+            }
         });
 
         parent.appendChild(btn);

@@ -1,54 +1,57 @@
-# Agent Handoff - Input Arbitration & State Machine
+# Agent Handoff - Input System Stabilization
 
 **Date:** 2025-12-05
-**Status:** Editor Functional, Input Arbitration Robust, Coordinate Systems Aligned.
+**Status:** Input System Robust, Editor Arbitration "Lazy-Loaded", Initialization Hardened.
 
 ## 1. Executive Summary
-We have successfully implemented a **Rigid Input Arbitration** system to manage the transition between `PLAY` and `EDIT` modes. This resolves previous issues where input states (dragging, aiming) could leak between modes, causing "stuck" shots or accidental painting. `Game.js` now acts as the central arbiter, enforcing mutual exclusivity between `Input.js` (Game) and `EditorSystem.js` (Editor).
+We have successfully resolved the critical "Dead Input" and "Initialization Crash" bugs. The Game's State Machine now correctly arbitrates between Gameplay and Editor modes using a **"Lazy Load" Input Pattern**. This ensures that the Editor's input handlers strictly respect the `PLAY` vs `EDIT` state and do not starve the game of events.
 
 ## 2. Completed Work
 
-### A. Rigid State Machine (`src/core/Game.js`)
-- **Central Authority**: Implemented `setMode(mode)` where `mode` is strictly `'PLAY'` or `'EDIT'`.
-- **Arbitration Logic**:
-    - **EDIT Mode**: Disables `Input.js`, Enables `EditorSystem`.
-    - **PLAY Mode**: Disables `EditorSystem`, Enables `Input.js`.
-- **Toggle**: Added `toggleEditor()` convenience method used by the UI.
+### A. The "Armored" Initialization (`src/core/Game.js`)
+*   **State Machine Fix**: Changed initial constructor state to `'LOADING'`. This ensures the first call to `setMode('PLAY')` in `init()` registers as a valid state change, triggering the necessary `input.enable()` and `editorSystem.disable()` calls.
+*   **Crash Prevention**: `updateUI()` is now guarded against missing DOM elements (`this.uiPar`, `this.uiStrokes`), preventing silent crashes during boot.
+*   **Order of Operations**: Moved `EditorSystem` instantiation to the very end of `init()` to ensure all dependencies (like `this.ball` and `this.audio`) are ready.
 
-### B. Input Safety (`src/input/Input.js`)
-- **Enable/Disable**: Added explicit methods to control input processing.
-- **State Clearing**: `disable()` now strictly resets `isDragging` and drag vectors. This prevents the ball from "sticking" to the cursor if the user switches to Editor mode mid-drag.
-- **Power Tweak**: Reduced `powerScale` from `0.15` to `0.10` for better control.
+### B. Input System Refinement (`src/input/Input.js`)
+*   **Removed Clamping**: Deleted the `0-600` clamping logic in `onStart`. This allows drags to originate in the margins (valid due to Camera Offsets) without being rejected.
+*   **Diagnostics**: Added detailed logging (`[Input] Click Detected: ...`) to verify coordinate transforms and enabled states.
+*   **Syntax Fixes**: Resolved duplicate variable declarations and ensured proper method structure.
 
-### C. Editor Cleanup (`src/editor/EditorSystem.js`, `src/editor/PointerInput.js`)
-- **Reset on Exit**: `EditorSystem.disable()` now:
-    - Resets the active tool to `HAND`.
-    - Calls `pointerInput.reset()` to clear all active touch points and panning/zooming state.
-- **Pointer Safety**: `PointerInput.reset()` ensures no "ghost touches" persist if the editor is closed while fingers are down.
+### C. Editor Arbitration (`src/editor/PointerInput.js`, `src/editor/EditorSystem.js`)
+*   **The "Lazy Load" Pattern**:
+    *   **PointerInput**: Removed `this.attach()` from the constructor. It now waits for an explicit command.
+    *   **EditorSystem**: Now explicitly calls `pointerInput.attach()` in `enable()` and `pointerInput.detach()` in `disable()`.
+*   **Safety**: Added a backup check in `handlePointerDown` (`if (!this.game.editorMode) return;`) to prevent "Ghost Touches" if the event listener removal fails or races.
 
-## 3. Challenges & Troubleshooting
+## 3. Challenges & Pitfalls Encountered
 
-### A. The "Early Constructor Close" Bug
-**Issue**: A `TypeError: Cannot set properties of undefined (setting 'isMoving')` occurred in `EditorSystem`.
-**Cause**: During the refactor of `Game.js`, the `constructor` closing brace `}` was accidentally placed *before* the initialization of `this.ball`. This meant `this.ball` was undefined when the Editor tried to access it.
-**Fix**: Restructured `Game.js` to ensure all properties are initialized before the constructor closes.
+### A. The "Silent" State Machine
+**Issue**: `Game.js` initialized `this.mode = 'PLAY'`. When `init()` called `setMode('PLAY')`, the guard clause `if (this.mode === mode) return;` triggered, skipping the setup logic.
+**Result**: The Editor overlay remained active (blocking mouse events), but the Game thought it was in Play mode.
+**Lesson**: Always initialize State Machines to a neutral/loading state to force an initial transition.
 
-### B. The "Method in Constructor" Syntax Error
-**Issue**: A `SyntaxError: Unexpected token '{'` occurred in `Game.js`.
-**Cause**: In fixing the previous bug, `setMode` and `toggleEditor` were accidentally defined *inside* the `constructor`.
-**Fix**: Moved these methods out of the constructor and into the class body, properly separating initialization logic (`init()`) from class methods.
+### B. Event Starvation
+**Issue**: `PointerInput.js` attached `preventDefault()` listeners in its constructor. Even when "disabled", these listeners were active on the canvas, swallowing events before they could bubble to the window-level `Input.js` listeners.
+**Result**: The game appeared unresponsive despite `Input.js` being "enabled".
+**Lesson**: Editor tools must strictly detach their listeners when not in use.
+
+### C. Coordinate Mismatch
+**Issue**: `Input.js` clamped `clientX/Y` to `0-600` *before* applying Camera Offsets.
+**Result**: Clicking near the edge of the screen (when the camera was centered) resulted in valid screen coordinates being clamped to invalid world coordinates, causing the drag to fail.
 
 ## 4. Current State & Next Steps
 
-### A. Known Gaps
-- **Missing Editor Tools**: `HOLE`, `START`, and `SLOPE` tools are defined in `TOOLS` but logic is missing in `EditorSystem`.
-- **Level Management**: Export/Import UI exists, but backend logic in `LevelSerializer` needs verification against the new `TileMap` structure.
+### A. Immediate Next Steps (Editor Features)
+The Editor infrastructure is now safe. We can proceed to implement the missing tools:
+1.  **Hole Tool**: Logic to place/move the hole (update `level.hole` and `TileMap`).
+2.  **Start Tool**: Logic to move the start position.
+3.  **Slope Tool**: Logic to place vector field arrows.
 
-### B. Critical Files
-- `src/core/Game.js`: The State Machine Arbiter.
-- `src/input/Input.js`: Handles Game Input (Putt).
-- `src/editor/EditorSystem.js`: Handles Editor State.
-- `src/editor/PointerInput.js`: Handles Editor Input (Paint/Pan/Zoom).
+### B. Persistence
+As per the updated GDD (v3.1), we need to implement the **Manifest Pattern** for `localStorage` saves to handle the level list efficiently.
 
-### C. Coordinate System Reminder
-- **Do NOT touch the coordinate math in `PointerInput.js`**. It correctly handles the `30, 60` Renderer viewport offset and Canvas scaling.
+### C. Critical Files
+*   `src/core/Game.js`: The Arbiter (State Machine).
+*   `src/input/Input.js`: Gameplay Input (Window-level, permissive).
+*   `src/editor/PointerInput.js`: Editor Input (Canvas-level, strict, lazy-loaded).

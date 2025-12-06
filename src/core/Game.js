@@ -282,6 +282,30 @@ export class Game {
             }
         }
 
+        // 4. Rasterize Slopes (Physics)
+        if (level.slopes) {
+            for (const slope of level.slopes) {
+                const col = Math.floor(slope.x / 60);
+                const row = Math.floor(slope.y / 60);
+
+                // Determine Slope Type based on Vector
+                let type = 'SLOPE_NORTH'; // Default
+                const vx = slope.vx || 0;
+                const vy = slope.vy || 0;
+
+                if (vx > 0 && vy === 0) type = 'SLOPE_EAST';
+                else if (vx < 0 && vy === 0) type = 'SLOPE_WEST';
+                else if (vx === 0 && vy > 0) type = 'SLOPE_SOUTH';
+                else if (vx === 0 && vy < 0) type = 'SLOPE_NORTH';
+                else if (vx > 0 && vy > 0) type = 'SLOPE_SE';
+                else if (vx > 0 && vy < 0) type = 'SLOPE_NE';
+                else if (vx < 0 && vy > 0) type = 'SLOPE_SW';
+                else if (vx < 0 && vy < 0) type = 'SLOPE_NW';
+
+                this.tileMap.setTile(col, row, type);
+            }
+        }
+
         this.ball.x = level.start.x;
         this.ball.y = level.start.y;
         this.ball.vx = 0;
@@ -464,6 +488,7 @@ export class Game {
         if (level) {
             this.renderer.drawLevel(this.tileMap);
             this.renderer.drawHazards(level); // Draw Hazards (Sand)
+            this.renderer.drawSlopes(level); // Draw Slopes (Arrows)
 
             this.renderer.drawWindParticles();
 
